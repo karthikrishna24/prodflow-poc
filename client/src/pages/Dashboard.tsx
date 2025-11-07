@@ -3,35 +3,56 @@ import ReleaseListPanel from "@/components/ReleaseListPanel";
 import EnvironmentFlowCanvas from "@/components/EnvironmentFlowCanvas";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+import { Anchor, LogOut } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
-  const [selectedRelease, setSelectedRelease] = useState<string | null>("1");
+  const [selectedRelease, setSelectedRelease] = useState<string | null>(null);
+  const { user, logoutMutation } = useAuth();
 
   const handleReleaseClick = (releaseId: string) => {
     setSelectedRelease(releaseId);
-    console.log("Selected release:", releaseId);
   };
 
   const handleEnvironmentClick = (envId: string) => {
-    console.log("Opening environment:", envId);
     if (selectedRelease) {
       setLocation(`/environment/${envId}?releaseId=${selectedRelease}`);
     }
+  };
+
+  const handleLogout = () => {
+    logoutMutation.mutate();
   };
 
   return (
     <div className="h-screen flex flex-col">
       <header className="h-16 border-b bg-card flex items-center justify-between px-6">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold">Release Manager</h1>
-          {selectedRelease && (
+          <Anchor className="h-6 w-6 text-primary" />
+          <h1 className="text-xl font-bold">Shipyard</h1>
+          <span className="text-sm text-muted-foreground">
+            by CargoCat
+          </span>
+        </div>
+        <div className="flex items-center gap-4">
+          {user && (
             <span className="text-sm text-muted-foreground">
-              / Release 2025.11.07
+              Captain {user.username}
             </span>
           )}
+          <ThemeToggle />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleLogout}
+            data-testid="button-logout"
+            title="Disembark"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
-        <ThemeToggle />
       </header>
 
       <div className="flex-1 flex overflow-hidden">
@@ -41,7 +62,11 @@ export default function Dashboard() {
             <EnvironmentFlowCanvas releaseId={selectedRelease} onEnvironmentClick={handleEnvironmentClick} />
           ) : (
             <div className="h-full flex items-center justify-center text-muted-foreground">
-              Select a release to view environments
+              <div className="text-center space-y-2">
+                <Anchor className="h-12 w-12 mx-auto text-muted-foreground/50" />
+                <p className="text-lg">Welcome to the Shipyard!</p>
+                <p className="text-sm">Select a voyage to chart your deployment course</p>
+              </div>
             </div>
           )}
         </div>

@@ -1,10 +1,14 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { setupAuth } from "./auth";
 import { insertReleaseSchema, insertStageSchema, insertTaskSchema, insertBlockerSchema } from "@shared/schema";
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Setup authentication routes
+  setupAuth(app);
+
   // Health check endpoint
   app.get("/api/health", async (req, res) => {
     try {
@@ -27,7 +31,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const team = req.query.team as string | undefined;
       const status = req.query.status as string | undefined;
       const releases = await storage.getReleases({ team, status });
-      res.json(releases);
+      
+      // Attach stages and blockers to each release for filtering
+      const releasesWithStages = await Promise.all(
+        releases.map(async (release) => {
+          const stages = await storage.getStagesByRelease(release.id);
+          const stagesWithBlockers = await Promise.all(
+            stages.map(async (stage) => {
+              const blockers = await storage.getBlockersByStage(stage.id, true);
+              return { ...stage, blockers };
+            })
+          );
+          return { ...release, stages: stagesWithBlockers };
+        })
+      );
+      
+      res.json(releasesWithStages);
     } catch (error) {
       next(error);
     }
@@ -193,7 +212,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedStage = await storage.updateStage(req.params.id, {
         approver,
         status: "done",
-        endedAt: new Date().toISOString(),
+        endedAt: new Date(),
       });
       
       // Log activity
@@ -248,10 +267,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const data = insertTaskSchema.partial().parse(req.body);
-      const updatedTask = await storage.updateTask(req.params.id, {
-        ...data,
-        updatedAt: new Date(),
-      });
+      const updatedTask = await storage.updateTask(req.params.id, data);
       
       // Get stage for logging
       const stage = await storage.getStage(task.stageId);

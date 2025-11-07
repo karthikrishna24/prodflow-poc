@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus } from "lucide-react";
+import { Ship } from "lucide-react";
 
 interface CreateReleaseDialogProps {
   onCreateRelease?: (data: { name: string; version: string; team: string }) => void;
@@ -27,7 +27,6 @@ export default function CreateReleaseDialog({ onCreateRelease }: CreateReleaseDi
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Creating release:", formData);
     onCreateRelease?.(formData);
     setFormData({ name: "", version: "", team: "" });
     setOpen(false);
@@ -37,24 +36,24 @@ export default function CreateReleaseDialog({ onCreateRelease }: CreateReleaseDi
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button className="w-full" data-testid="button-create-release">
-          <Plus className="h-4 w-4 mr-2" />
-          Create Release
+          <Ship className="h-4 w-4 mr-2" />
+          Launch New Voyage
         </Button>
       </DialogTrigger>
       <DialogContent data-testid="dialog-create-release">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Create New Release</DialogTitle>
+            <DialogTitle>Launch New Voyage</DialogTitle>
             <DialogDescription>
-              Add a new release to track deployments across environments.
+              Chart a new deployment journey across your environments
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Release Name</Label>
+              <Label htmlFor="name">Voyage Name</Label>
               <Input
                 id="name"
-                placeholder="e.g., Release 2025.11.07"
+                placeholder="e.g., Q4 Product Launch"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
@@ -62,7 +61,7 @@ export default function CreateReleaseDialog({ onCreateRelease }: CreateReleaseDi
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="version">Version</Label>
+              <Label htmlFor="version">Cargo Version</Label>
               <Input
                 id="version"
                 placeholder="e.g., v2.5.0"
@@ -73,7 +72,7 @@ export default function CreateReleaseDialog({ onCreateRelease }: CreateReleaseDi
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="team">Team</Label>
+              <Label htmlFor="team">Crew</Label>
               <Input
                 id="team"
                 placeholder="e.g., Platform Team"
@@ -89,7 +88,7 @@ export default function CreateReleaseDialog({ onCreateRelease }: CreateReleaseDi
               Cancel
             </Button>
             <Button type="submit" data-testid="button-submit">
-              Create Release
+              Set Sail
             </Button>
           </DialogFooter>
         </form>
