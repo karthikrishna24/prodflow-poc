@@ -139,6 +139,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Environments
+  app.post("/api/teams/:teamId/environments", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const { teamId } = req.params;
+      const hasAccess = await validateTeamAccess(req.user!.id, teamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const { name, sortOrder } = req.body;
+      if (!name) {
+        return res.status(400).json({ message: "Environment name is required" });
+      }
+      
+      const environment = await storage.createEnvironment({
+        teamId,
+        name,
+        sortOrder: sortOrder || "0",
+        isDefault: false,
+      });
+      
+      res.status(201).json(environment);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // Releases
   app.get("/api/releases", async (req, res, next) => {
     try {
@@ -335,6 +364,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Stages
+  app.post("/api/releases/:releaseId/stages", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const { releaseId } = req.params;
+      const release = await storage.getRelease(releaseId);
+      if (!release) {
+        return res.status(404).json({ message: "Release not found" });
+      }
+      
+      const hasAccess = await validateTeamAccess(req.user!.id, release.teamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const data = insertStageSchema.parse({
+        ...req.body,
+        releaseId,
+      });
+      
+      const stage = await storage.createStage(data);
+      res.status(201).json(stage);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      next(error);
+    }
+  });
+
   app.get("/api/stages/:id", async (req, res, next) => {
     try {
       if (!req.isAuthenticated()) return res.sendStatus(401);

@@ -6,6 +6,7 @@ export interface Release {
   name: string;
   version?: string;
   team?: string;
+  teamId?: string; // API returns teamId
   createdBy?: string;
   createdAt: string;
   status?: "not_started" | "in_progress" | "blocked" | "done";
