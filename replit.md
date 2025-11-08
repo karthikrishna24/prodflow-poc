@@ -16,6 +16,12 @@ DockVoyage is a production-ready multi-tenant release management platform featur
 
 ## Recent Changes (November 8, 2025)
 
+### Session Handling Fix ✅
+- **Fixed session deserialization errors** that prevented app from loading
+- Updated Passport deserializeUser to gracefully handle missing users (returns null instead of throwing)
+- Cleared invalid sessions from database after migration
+- App now loads cleanly without session-related errors
+
 ### Multi-Tenant Architecture Migration ✅
 - **Complete database redesign** with workspaces, teams, members, environments, and flows
 - **Auto-provisioning**: New users automatically get workspace + team + 3 default environments
