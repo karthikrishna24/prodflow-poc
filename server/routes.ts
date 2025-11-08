@@ -150,7 +150,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Access denied" });
       }
       
-      const { name, sortOrder } = req.body;
+      const { name, description, sortOrder } = req.body;
       if (!name) {
         return res.status(400).json({ message: "Environment name is required" });
       }
@@ -158,11 +158,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const environment = await storage.createEnvironment({
         teamId,
         name,
+        description: description || undefined,
         sortOrder: sortOrder || "0",
         isDefault: false,
       });
       
       res.status(201).json(environment);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete("/api/environments/:id", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const { id } = req.params;
+      
+      // Get the environment to verify team access
+      const environment = await storage.getEnvironment(id);
+      if (!environment) {
+        return res.status(404).json({ message: "Environment not found" });
+      }
+      
+      // Verify user has access to the team
+      const hasAccess = await validateTeamAccess(req.user!.id, environment.teamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      // Delete the environment (cascade will delete stages)
+      await storage.deleteEnvironment(id);
+      
+      res.sendStatus(204);
     } catch (error) {
       next(error);
     }

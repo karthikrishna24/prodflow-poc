@@ -1,7 +1,9 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Handle, Position } from "reactflow";
 import { cn } from "@/lib/utils";
+import { Trash2 } from "lucide-react";
 
 interface EnvironmentNodeProps {
   id: string;
@@ -12,6 +14,7 @@ interface EnvironmentNodeProps {
   tasksTotal: number;
   lastUpdate?: string;
   onClick?: () => void;
+  onDelete?: (id: string) => void;
 }
 
 const envConfig: Record<string, { label: string; className: string }> = {
@@ -40,6 +43,7 @@ export default function EnvironmentNode({
   tasksTotal,
   lastUpdate,
   onClick,
+  onDelete,
 }: EnvironmentNodeProps) {
   // Use the env config if it exists, otherwise use default config
   const envKey = env?.toLowerCase() || "";
@@ -56,13 +60,29 @@ export default function EnvironmentNode({
         data-testid={`card-environment-${id}`}
       >
         <div className="p-4 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <Badge className={cn("text-xs font-medium", envInfo.className)} data-testid={`badge-env-${id}`}>
               {envInfo.label}
             </Badge>
-            <div className="flex items-center gap-1.5">
-              <div className={cn("h-2 w-2 rounded-full", statusInfo.dot)} />
-              <span className="text-xs text-muted-foreground">{statusInfo.label}</span>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <div className={cn("h-2 w-2 rounded-full", statusInfo.dot)} />
+                <span className="text-xs text-muted-foreground">{statusInfo.label}</span>
+              </div>
+              {onDelete && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(id);
+                  }}
+                  data-testid={`button-delete-env-${id}`}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              )}
             </div>
           </div>
 

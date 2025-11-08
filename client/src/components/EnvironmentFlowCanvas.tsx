@@ -46,6 +46,7 @@ const nodeTypes = {
       tasksTotal={data.tasksTotal}
       lastUpdate={data.lastUpdate}
       onClick={data.onClick}
+      onDelete={data.onDelete}
     />
   ),
 };
@@ -127,6 +128,7 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
           lastUpdate: env.lastUpdate,
           blockers: env.blockers,
           onClick: () => onEnvironmentClick?.(env.id),
+          onDelete: () => handleDeleteEnvironment(env.id),
         },
       };
     });
@@ -324,6 +326,39 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
         name: newEnvName.trim(), 
         description: newEnvDescription.trim() || undefined 
       });
+    }
+  };
+
+  // Delete environment mutation
+  const deleteEnvironment = useMutation({
+    mutationFn: async (environmentId: string) => {
+      // Find the stage associated with this environment in the current release
+      const stage = environments.find((env: any) => env.id === environmentId);
+      if (!stage) throw new Error("Environment not found in this release");
+      
+      // Delete the environment (cascade will delete all stages)
+      await apiRequest('DELETE', `/api/environments/${stage.environmentId}`);
+      return environmentId;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/releases', releaseId] });
+      toast({
+        title: "Environment deleted",
+        description: "Environment has been removed from all releases.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to delete environment",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteEnvironment = (environmentId: string) => {
+    if (confirm("Are you sure you want to delete this environment? This will remove it from all releases.")) {
+      deleteEnvironment.mutate(environmentId);
     }
   };
 
