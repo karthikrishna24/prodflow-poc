@@ -1,7 +1,8 @@
 import { Handle, Position } from "reactflow";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { CheckCircle2, Circle, Clock, Trash2, User } from "lucide-react";
+import { CheckCircle2, Circle, Clock, Trash2, User, ChevronDown, ChevronUp, FileText, AlertTriangle } from "lucide-react";
+import { useState } from "react";
 
 interface TaskNodeProps {
   id: string;
@@ -42,6 +43,7 @@ export default function TaskNode({
   onDelete,
   onToggle,
 }: TaskNodeProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const statusInfo = statusConfig[status];
   const StatusIcon = statusInfo.icon;
 
@@ -51,7 +53,7 @@ export default function TaskNode({
       data-testid={`task-node-${id}`}
     >
       <Handle type="target" position={Position.Left} className="!bg-primary" />
-      
+
       <div className="p-3 space-y-2">
         {/* Header with status and actions */}
         <div className="flex items-start justify-between gap-2">
@@ -109,6 +111,60 @@ export default function TaskNode({
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <User className="h-3 w-3" />
             <span>{owner}</span>
+          </div>
+        )}
+
+        {/* Expand/Collapse Button */}
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6"
+          onClick={() => setIsExpanded(!isExpanded)}
+          data-testid={`button-expand-task-${id}`}
+        >
+          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </Button>
+
+        {/* Expanded Content */}
+        {isExpanded && (
+          <div className="space-y-2 mt-2">
+            {/* To-Do List */}
+            <div>
+              <h5 className="text-xs font-medium">To-Do List</h5>
+              <ul className="list-disc list-inside text-xs text-muted-foreground">
+                <li>Define requirements</li>
+                <li>Review code</li>
+                <li>Deploy to staging</li>
+              </ul>
+            </div>
+
+            {/* Blocker List */}
+            <div>
+              <h5 className="text-xs font-medium">Blockers</h5>
+              <ul className="list-disc list-inside text-xs text-muted-foreground">
+                <li className="text-red-500 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  Database migration pending
+                </li>
+                <li className="text-yellow-500 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  API rate limits
+                </li>
+              </ul>
+            </div>
+
+            {/* Documentation Link */}
+            <div>
+              <h5 className="text-xs font-medium">Documentation</h5>
+              <a
+                href="#"
+                className="text-xs text-blue-500 hover:underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                View related docs
+              </a>
+            </div>
           </div>
         )}
       </div>

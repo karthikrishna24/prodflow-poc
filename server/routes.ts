@@ -162,6 +162,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // List environments for a team (used by client to find existing envs)
+  app.get("/api/teams/:teamId/environments", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+
+      const { teamId } = req.params;
+      const hasAccess = await validateTeamAccess(req.user!.id, teamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const envs = await storage.getEnvironmentsByTeam(teamId);
+      res.json(envs);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.patch("/api/environments/:id", async (req, res, next) => {
     try {
       if (!req.isAuthenticated()) return res.sendStatus(401);

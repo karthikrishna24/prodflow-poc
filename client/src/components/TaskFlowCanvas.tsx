@@ -114,8 +114,11 @@ export default function TaskFlowCanvas({ releaseId, stageId, environmentName, on
   // Sync nodes and edges with tasks and diagram data
   useEffect(() => {
     if (!tasks || tasks.length === 0) {
-      setNodes([]);
-      setEdges([]);
+      // If there are no tasks, clear only when there are no local unsaved changes
+      if (!hasUnsavedChanges) {
+        setNodes([]);
+        setEdges([]);
+      }
       return;
     }
 
@@ -169,27 +172,49 @@ export default function TaskFlowCanvas({ releaseId, stageId, environmentName, on
           },
         }));
 
-      setNodes([...updatedNodes, ...newTaskNodes]);
-      setEdges(savedEdges || []);
+      // Apply server-supplied layout only if there are no local unsaved changes.
+      setNodes((prev) => {
+        return !hasUnsavedChanges ? [...updatedNodes, ...newTaskNodes] : prev.length ? prev : [...updatedNodes, ...newTaskNodes];
+      });
+      setEdges((prev) => (!hasUnsavedChanges ? (savedEdges || []) : prev));
     } else {
-      // No saved diagram, create fresh nodes with default positions
-      const newNodes = tasks.map((task: any, index: number) => ({
-        id: task.id,
-        type: "task",
-        position: { x: 100 + (index % 3) * 350, y: 100 + Math.floor(index / 3) * 200 },
-        data: {
+      // Strictly use saved layout with aggressive preservation
+      const savedLayout = diagram?.layout;
+      const savedNodes = savedLayout?.nodes || [];
+
+      const newNodes = tasks.map((task: any, index: number) => {
+        // Use exact saved position, with minimal predictable fallback
+        const savedNode = savedNodes.find((n: any) => n.id === task.id);
+        const position = savedNode?.position || { 
+          x: Math.random() * 800,  // Random initial position within 800x600 area
+          y: Math.random() * 600 
+        };
+
+        return {
           id: task.id,
-          title: task.title,
-          description: task.description,
-          status: task.status,
-          owner: task.owner,
-          required: task.required,
-          onDelete: handleDeleteTask,
-          onToggle: handleToggleTask,
-        },
-      }));
-      setNodes(newNodes);
-      setEdges([]);
+          type: "task",
+          position: { 
+            x: position.x, 
+            y: position.y 
+          },
+          draggable: true,
+          selectable: true,
+          connectable: true,
+          data: {
+            id: task.id,
+            title: task.title,
+            description: task.description,
+            status: task.status,
+            owner: task.owner,
+            required: task.required,
+            onDelete: handleDeleteTask,
+            onToggle: handleToggleTask,
+          },
+        };
+      });
+      
+      setNodes((prev) => (!hasUnsavedChanges ? newNodes : prev.length ? prev : newNodes));
+      setEdges((prev) => (!hasUnsavedChanges ? [] : prev));
     }
   }, [tasks, diagram, handleDeleteTask, handleToggleTask]);
 
@@ -236,7 +261,11 @@ export default function TaskFlowCanvas({ releaseId, stageId, environmentName, on
         body: JSON.stringify({
           layout: {
             nodes: nodes.map((node) => ({
-              ...node,
+              id: node.id,
+              position: {
+                x: node.position.x || 0,  // Explicitly preserve exact x position
+                y: node.position.y || 0,  // Explicitly preserve exact y position
+              },
               data: {
                 id: node.data.id,
                 title: node.data.title,
@@ -248,6 +277,7 @@ export default function TaskFlowCanvas({ releaseId, stageId, environmentName, on
             })),
             edges,
           },
+          preserveLayout: true  // New flag to indicate strict layout preservation
         }),
         credentials: "include",
       });
@@ -258,7 +288,7 @@ export default function TaskFlowCanvas({ releaseId, stageId, environmentName, on
       setHasUnsavedChanges(false);
       toast({
         title: "Layout saved",
-        description: "Task canvas layout has been saved successfully.",
+        description: "Task canvas layout has been saved exactly as positioned.",
       });
       queryClient.invalidateQueries({ queryKey: ['/api/stages', stageId, 'task-diagram'] });
     },
@@ -274,7 +304,9 @@ export default function TaskFlowCanvas({ releaseId, stageId, environmentName, on
   // Add task mutation
   const addTask = useMutation({
     mutationFn: async (newTask: { title: string; description?: string; owner?: string }) => {
-      const response = await fetch(`/api/releases/${releaseId}/stages/${stageId}/tasks`, {
+      // server route expects POST /api/stages/:stageId/tasks
+      const url = `/api/stages/${stageId}/tasks`;
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newTask),
@@ -370,10 +402,17 @@ export default function TaskFlowCanvas({ releaseId, stageId, environmentName, on
             nodesDraggable={true}
             nodesConnectable={true}
             elementsSelectable={true}
-            minZoom={0.3}
-            maxZoom={2}
+            snapToGrid={false}
+            snapGrid={[1, 1]}
             defaultViewport={{ x: 0, y: 0, zoom: 1 }}
-            proOptions={{ hideAttribution: true }}
+            minZoom={0.1}
+            maxZoom={3}
+            nodeOrigin={[0, 0]}
+            panOnScroll
+            panOnDrag
+            zoomOnScroll
+            zoomOnPinch
+            fitView={false}
           >
             <Background />
             <Controls />
