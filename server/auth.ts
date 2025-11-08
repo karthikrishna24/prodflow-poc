@@ -79,14 +79,20 @@ export function setupAuth(app: Express) {
       }
 
       const user = await storage.createUser({
-        ...req.body,
+        username: req.body.username,
+        email: req.body.email,
         password: await hashPassword(req.body.password),
       });
 
       // Auto-create workspace, team, and environments for new user
+      const workspaceType = req.body.workspaceType || "individual";
+      const workspaceName = workspaceType === "organization" && req.body.workspaceName
+        ? req.body.workspaceName
+        : `${user.username}'s Workspace`;
+
       const workspace = await storage.createWorkspace({
-        name: `${user.username}'s Workspace`,
-        type: "individual",
+        name: workspaceName,
+        type: workspaceType,
         slug: `${user.username}-${randomBytes(4).toString("hex")}`,
         createdBy: user.id,
       });

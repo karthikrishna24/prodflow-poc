@@ -6,13 +6,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Anchor, Ship, Package } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Anchor, Ship, Package, User, Users } from "lucide-react";
 
 export default function AuthPage() {
   const { user, loginMutation, registerMutation } = useAuth();
   const [, setLocation] = useLocation();
   const [loginData, setLoginData] = useState({ username: "", password: "" });
-  const [registerData, setRegisterData] = useState({ username: "", password: "" });
+  const [registerData, setRegisterData] = useState({ 
+    username: "", 
+    password: "", 
+    email: "",
+    workspaceType: "individual" as "individual" | "organization",
+    workspaceName: ""
+  });
 
   if (user) {
     setLocation("/");
@@ -119,6 +126,18 @@ export default function AuthPage() {
                       />
                     </div>
                     <div className="space-y-2">
+                      <Label htmlFor="register-email">Email</Label>
+                      <Input
+                        id="register-email"
+                        data-testid="input-register-email"
+                        type="email"
+                        placeholder="your@email.com"
+                        value={registerData.email}
+                        onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
                       <Label htmlFor="register-password">Password</Label>
                       <Input
                         id="register-password"
@@ -130,6 +149,51 @@ export default function AuthPage() {
                         required
                       />
                     </div>
+                    <div className="space-y-3">
+                      <Label>What brings you aboard?</Label>
+                      <RadioGroup
+                        value={registerData.workspaceType}
+                        onValueChange={(value: "individual" | "organization") => 
+                          setRegisterData({ ...registerData, workspaceType: value })
+                        }
+                        data-testid="radio-workspace-type"
+                      >
+                        <div className="flex items-center space-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent" onClick={() => setRegisterData({ ...registerData, workspaceType: "individual" })}>
+                          <RadioGroupItem value="individual" id="individual" data-testid="radio-individual" />
+                          <Label htmlFor="individual" className="flex items-center gap-2 cursor-pointer flex-1">
+                            <User className="h-4 w-4" />
+                            <div>
+                              <div className="font-medium">Individual</div>
+                              <div className="text-xs text-muted-foreground">For personal projects</div>
+                            </div>
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent" onClick={() => setRegisterData({ ...registerData, workspaceType: "organization" })}>
+                          <RadioGroupItem value="organization" id="organization" data-testid="radio-organization" />
+                          <Label htmlFor="organization" className="flex items-center gap-2 cursor-pointer flex-1">
+                            <Users className="h-4 w-4" />
+                            <div>
+                              <div className="font-medium">Organization</div>
+                              <div className="text-xs text-muted-foreground">For teams and collaboration</div>
+                            </div>
+                          </Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+                    {registerData.workspaceType === "organization" && (
+                      <div className="space-y-2">
+                        <Label htmlFor="workspace-name">Organization Name</Label>
+                        <Input
+                          id="workspace-name"
+                          data-testid="input-workspace-name"
+                          type="text"
+                          placeholder="e.g., Acme Corp"
+                          value={registerData.workspaceName}
+                          onChange={(e) => setRegisterData({ ...registerData, workspaceName: e.target.value })}
+                          required={registerData.workspaceType === "organization"}
+                        />
+                      </div>
+                    )}
                     <Button
                       type="submit"
                       className="w-full"
