@@ -23,14 +23,14 @@ export interface CreateReleaseData {
 
 export function useReleases(teamId?: string) {
   return useQuery<Release[]>({
-    queryKey: ["/api/releases", teamId ? { teamId } : undefined],
+    queryKey: teamId ? ["/api/releases", { teamId }] : ["/api/releases"],
     // The default queryFn from queryClient will handle the API_BASE_URL and query params
   });
 }
 
 export function useRelease(id: string | null) {
   return useQuery<Release>({
-    queryKey: id ? [`/api/releases/${id}`] : ["skip"],
+    queryKey: id ? ['/api/releases', id] : ["skip"],
     enabled: !!id,
   });
 }
@@ -63,7 +63,7 @@ export function useUpdateRelease() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/releases"] });
-      queryClient.invalidateQueries({ queryKey: [`/api/releases/${variables.id}`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/releases', variables.id] });
     },
   });
 }
