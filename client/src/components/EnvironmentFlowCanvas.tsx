@@ -281,8 +281,13 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
   const addEnvironment = useMutation({
     mutationFn: async ({ name, description }: { name: string; description?: string }) => {
       if (!releaseId) throw new Error("No release selected");
-      const teamId = release?.teamId || release?.team;
-      if (!teamId) throw new Error("No team associated with release");
+      if (!release) throw new Error("Release data not loaded");
+      
+      const teamId = release.teamId || release.team;
+      if (!teamId) {
+        console.error("Release object:", release);
+        throw new Error("No team associated with release");
+      }
 
       // First create the environment
       const envResponse = await apiRequest('POST', `/api/teams/${teamId}/environments`, { 

@@ -60,28 +60,39 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    // queryKey is an array like ["/api/teams"] or ["/api/releases", { teamId: "..." }]
+    // queryKey can be:
+    // ["/api/teams"] - simple path
+    // ["/api/releases", id] - path with ID segment
+    // ["/api/releases", { teamId: "..." }] - path with query params
     const path = Array.isArray(queryKey) 
       ? String(queryKey[0])
       : String(queryKey);
     
-    const fullUrl = path.startsWith("/")
+    let fullUrl = path.startsWith("/")
       ? `${API_BASE_URL}${path}`
       : `${API_BASE_URL}/${path}`;
     
-    // Handle query parameters if present
-    let url = fullUrl;
-    if (Array.isArray(queryKey) && queryKey.length > 1 && typeof queryKey[1] === "object") {
-      const params = new URLSearchParams();
-      Object.entries(queryKey[1] as Record<string, string>).forEach(([key, value]) => {
-        if (value) params.append(key, value);
-      });
-      if (params.toString()) {
-        url = `${fullUrl}?${params.toString()}`;
+    // Handle additional path segments or query parameters
+    if (Array.isArray(queryKey) && queryKey.length > 1) {
+      const secondElement = queryKey[1];
+      
+      // If it's a string, it's a path segment (like an ID)
+      if (typeof secondElement === "string") {
+        fullUrl = `${fullUrl}/${secondElement}`;
+      }
+      // If it's an object, it's query parameters
+      else if (typeof secondElement === "object" && secondElement !== null) {
+        const params = new URLSearchParams();
+        Object.entries(secondElement as Record<string, string>).forEach(([key, value]) => {
+          if (value) params.append(key, value);
+        });
+        if (params.toString()) {
+          fullUrl = `${fullUrl}?${params.toString()}`;
+        }
       }
     }
     
-    const res = await fetch(url, {
+    const res = await fetch(fullUrl, {
       credentials: "include",
     });
 
