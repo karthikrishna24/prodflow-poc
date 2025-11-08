@@ -58,8 +58,17 @@ export function setupAuth(app: Express) {
 
   passport.serializeUser((user, done) => done(null, user.id));
   passport.deserializeUser(async (id: string, done) => {
-    const user = await storage.getUser(id);
-    done(null, user);
+    try {
+      const user = await storage.getUser(id);
+      if (!user) {
+        // User no longer exists (e.g., after database migration) - clear the session
+        return done(null, null);
+      }
+      done(null, user);
+    } catch (error) {
+      // Handle any errors gracefully
+      done(null, null);
+    }
   });
 
   app.post("/api/register", async (req, res, next) => {
