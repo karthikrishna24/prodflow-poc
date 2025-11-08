@@ -4,7 +4,7 @@ import EnvironmentFlowCanvas from "@/components/EnvironmentFlowCanvas";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { Anchor, LogOut } from "lucide-react";
+import { Anchor, LogOut, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function Dashboard() {
@@ -39,6 +39,15 @@ export default function Dashboard() {
               Captain {user.username}
             </span>
           )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setLocation("/team")}
+            data-testid="button-team"
+            title="Manage Crew"
+          >
+            <Users className="h-4 w-4" />
+          </Button>
           <ThemeToggle />
           <Button
             variant="ghost"
