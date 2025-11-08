@@ -279,16 +279,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get stages for this release
       const stages = await storage.getStagesByRelease(req.params.id);
       
-      // Get tasks for each stage
-      const stagesWithTasks = await Promise.all(
+      // Get tasks, environment, and blockers for each stage
+      const stagesWithData = await Promise.all(
         stages.map(async (stage) => {
           const tasks = await storage.getTasksByStage(stage.id);
           const blockers = await storage.getBlockersByStage(stage.id, true);
-          return { ...stage, tasks, blockers };
+          const environment = await storage.getEnvironment(stage.environmentId);
+          return { ...stage, tasks, blockers, environment };
         })
       );
       
-      res.json({ ...release, stages: stagesWithTasks });
+      res.json({ ...release, stages: stagesWithData });
     } catch (error) {
       next(error);
     }
