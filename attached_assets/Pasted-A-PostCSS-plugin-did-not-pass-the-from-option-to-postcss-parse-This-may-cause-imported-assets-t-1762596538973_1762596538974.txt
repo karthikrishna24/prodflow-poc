@@ -1,0 +1,41 @@
+A PostCSS plugin did not pass the `from` option to `postcss.parse`. This may cause imported assets to be incorrectly transformed. If you've recently added a PostCSS plugin that raised this warning, please contact the package author to fix the issue.
+10:05:46 AM [express] GET /api/user 401 in 24ms
+10:05:50 AM [express] GET /api/user 401 in 1ms
+10:05:57 AM [express] GET /api/user 401 in 4ms
+Error: error: relation "users" does not exist
+    at /home/runner/workspace/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async <anonymous> (/home/runner/workspace/node_modules/src/node-postgres/session.ts:104:19)
+    at async DatabaseStorage.getUserByUsername (/home/runner/workspace/server/storage.ts:167:20)
+    at async <anonymous> (/home/runner/workspace/server/auth.ts:76:28) {
+  length: 104,
+  severity: 'ERROR',
+  code: '42P01',
+  detail: undefined,
+  hint: undefined,
+  position: '65',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '1452',
+  routine: 'parserOpenTable'
+}
+Stack: error: relation "users" does not exist
+    at /home/runner/workspace/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async <anonymous> (/home/runner/workspace/node_modules/src/node-postgres/session.ts:104:19)
+    at async DatabaseStorage.getUserByUsername (/home/runner/workspace/server/storage.ts:167:20)
+    at async <anonymous> (/home/runner/workspace/server/auth.ts:76:28)
+10:08:28 AM [express] POST /api/register 500 in 50ms :: {"message":"relation \"users\" does not exist…
+error: relation "users" does not exist
+    at /home/runner/workspace/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async <anonymous> (/home/runner/workspace/node_modules/src/node-postgres/session.ts:104:19)
+    at async DatabaseStorage.getUserByUsername (/home/runner/workspace/server/storage.ts:167:20)
+    at async <anonymous> (/home/runner/workspace/server/auth.ts:76:28)
