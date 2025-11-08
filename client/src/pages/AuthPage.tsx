@@ -35,11 +35,11 @@ export default function AuthPage() {
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
             <div className="flex items-center justify-center gap-2 mb-4">
-              <Anchor className="h-10 w-10 text-primary" />
-              <h1 className="text-4xl font-bold">Shipyard</h1>
+              <span className="text-4xl">🐱</span>
+              <h1 className="text-4xl font-bold">DockVoyage</h1>
             </div>
             <p className="text-muted-foreground">
-              Your release dockmaster for smooth deployments
+              See your releases clearly.
             </p>
           </div>
 

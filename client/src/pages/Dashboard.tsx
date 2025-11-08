@@ -30,8 +30,8 @@ export default function Dashboard() {
     <div className="h-screen flex flex-col">
       <header className="h-16 border-b bg-card flex items-center justify-between px-6">
         <div className="flex items-center gap-3">
-          <Anchor className="h-6 w-6 text-primary" />
-          <h1 className="text-xl font-bold">Shipyard</h1>
+          <span className="text-2xl">🐱</span>
+          <h1 className="text-xl font-bold">DockVoyage</h1>
           <span className="text-sm text-muted-foreground">
             by CargoCat
           </span>
@@ -63,8 +63,8 @@ export default function Dashboard() {
           ) : (
             <div className="h-full flex items-center justify-center text-muted-foreground">
               <div className="text-center space-y-2">
-                <Anchor className="h-12 w-12 mx-auto text-muted-foreground/50" />
-                <p className="text-lg">Welcome to the Shipyard!</p>
+                <span className="text-6xl">🐱</span>
+                <p className="text-lg">Welcome to DockVoyage!</p>
                 <p className="text-sm">Select a voyage to chart your deployment course</p>
               </div>
             </div>
