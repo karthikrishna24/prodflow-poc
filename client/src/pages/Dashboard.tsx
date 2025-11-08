@@ -30,11 +30,8 @@ export default function Dashboard() {
     <div className="h-screen flex flex-col">
       <header className="h-16 border-b bg-card flex items-center justify-between px-6">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">🐱</span>
+          <Anchor className="w-6 h-6 text-primary" />
           <h1 className="text-xl font-bold">DockVoyage</h1>
-          <span className="text-sm text-muted-foreground">
-            by CargoCat
-          </span>
         </div>
         <div className="flex items-center gap-4">
           {user && (
@@ -63,7 +60,7 @@ export default function Dashboard() {
           ) : (
             <div className="h-full flex items-center justify-center text-muted-foreground">
               <div className="text-center space-y-2">
-                <span className="text-6xl">🐱</span>
+                <Anchor className="w-16 h-16 mx-auto text-muted-foreground" />
                 <p className="text-lg">Welcome to DockVoyage!</p>
                 <p className="text-sm">Select a voyage to chart your deployment course</p>
               </div>
