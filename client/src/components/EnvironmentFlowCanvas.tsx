@@ -447,7 +447,6 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
           nodesDraggable={true}
           nodesConnectable={true}
           elementsSelectable={true}
-          fitView
           minZoom={0.3}
           maxZoom={2}
           defaultViewport={{ x: 0, y: 0, zoom: 1 }}

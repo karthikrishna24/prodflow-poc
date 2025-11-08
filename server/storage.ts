@@ -42,6 +42,7 @@ import {
   blockers,
   diagrams,
   diagramNodes,
+  stageDiagrams,
   activityLog,
 } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
@@ -518,6 +519,24 @@ class DatabaseStorage implements IStorage {
       return result[0];
     } else {
       const result = await db.insert(diagrams).values({ releaseId, layout }).returning();
+      return result[0];
+    }
+  }
+
+  // Stage Diagrams
+  async getStageDiagram(stageId: string): Promise<any | undefined> {
+    const result = await db.select().from(stageDiagrams).where(eq(stageDiagrams.stageId, stageId)).limit(1);
+    return result[0];
+  }
+
+  async saveStageDiagram(stageId: string, layout: any): Promise<any> {
+    const existing = await this.getStageDiagram(stageId);
+    
+    if (existing) {
+      const result = await db.update(stageDiagrams).set({ layout, updatedAt: new Date() }).where(eq(stageDiagrams.stageId, stageId)).returning();
+      return result[0];
+    } else {
+      const result = await db.insert(stageDiagrams).values({ id: crypto.randomUUID(), stageId, layout }).returning();
       return result[0];
     }
   }

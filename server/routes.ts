@@ -575,6 +575,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Task diagram endpoints
+  app.get("/api/stages/:stageId/task-diagram", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const stage = await storage.getStage(req.params.stageId);
+      if (!stage) {
+        return res.status(404).json({ message: "Stage not found" });
+      }
+      
+      const release = await storage.getRelease(stage.releaseId);
+      if (!release || !(await validateTeamAccess(req.user!.id, release.teamId))) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const diagram = await storage.getStageDiagram(req.params.stageId);
+      res.json(diagram || { layout: { nodes: [], edges: [] } });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/stages/:stageId/task-diagram", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const stage = await storage.getStage(req.params.stageId);
+      if (!stage) {
+        return res.status(404).json({ message: "Stage not found" });
+      }
+      
+      const release = await storage.getRelease(stage.releaseId);
+      if (!release || !(await validateTeamAccess(req.user!.id, release.teamId))) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const { layout } = req.body;
+      const diagram = await storage.saveStageDiagram(req.params.stageId, layout);
+      
+      res.json(diagram);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // Tasks
   app.post("/api/stages/:stageId/tasks", async (req, res, next) => {
     try {

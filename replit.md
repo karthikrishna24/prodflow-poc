@@ -15,7 +15,7 @@ DockVoyage is a production-ready multi-tenant release management platform design
 - **State Management & Data Fetching**: TanStack Query for server state, React Context for global auth.
 - **UI Component System**: shadcn/ui on Radix UI, Shipyard nautical design system, Tailwind CSS, custom CSS variables, Inter/JetBrains Mono fonts.
 - **Authentication Flow**: Split-screen login/signup, protected routes, session persistence.
-- **Interactive Visualization**: React Flow library for node-based diagrams (environments, tasks) with a three-column layout.
+- **Interactive Visualization**: React Flow library for nested canvases - EnvironmentFlowCanvas (main) and TaskFlowCanvas (nested). No auto-centering, manual connections only, layout persistence via backend.
 - **Form Management**: React Hook Form with Zod for schema validation.
 
 ### Backend Architecture
@@ -27,7 +27,7 @@ DockVoyage is a production-ready multi-tenant release management platform design
 ### Data Storage
 - **Database Schema**:
     - **Multi-Tenant Core**: `workspaces` (id, name, type), `workspaceMembers` (user→workspace, roles), `teams` (id, name), `teamMembers` (user→team, roles), `invitations`.
-    - **Release Management**: `releases` (id, teamId, name, version), `environments` (id, teamId, name), `stages` (releaseId, environmentId, status), `flows`, `tasks` (stageId, title, owner, status, evidence), `blockers` (stageId, severity, active), `activityLog`.
+    - **Release Management**: `releases` (id, teamId, name, version), `environments` (id, teamId, name), `stages` (releaseId, environmentId, status), `flows`, `stageDiagrams` (stageId, layout with nodes/edges, updatedAt), `tasks` (stageId, title, owner, status, evidence), `blockers` (stageId, severity, active), `activityLog`.
 - **Enums**: For workspace types, member roles, stage statuses, task statuses, blocker severity, invitation status.
 - **Session Storage**: PostgreSQL-backed session store using `connect-pg-simple`.
 
@@ -35,7 +35,7 @@ DockVoyage is a production-ready multi-tenant release management platform design
 - **Theming**: Nautical theme with anchor branding, ocean-inspired colors (Navy blue, Ocean blue), all UI text uses nautical terminology (Releases → Voyages, Environments → Cargo Holds, Agent → Dockmaster).
 - **Icons**: Lucide React for UI icons, no emojis.
 - **Interactive Canvas**: Draggable environment nodes, visual flow connections, auto-save, persistent diagram storage.
-- **Stage Detail Panel**: Split-view UX, task management with evidence links, blocker tracking with severity badges, real-time updates.
+- **Stage Detail Panel**: Full-screen nested canvas UX. Clicking an environment node opens TaskFlowCanvas in full view with back navigation. Tasks displayed as draggable nodes with task management, real-time updates.
 - **Environment Management**: User-controlled environment creation and deletion, user-friendly error messages.
 
 ### Feature Specifications

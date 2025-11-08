@@ -1,4 +1,4 @@
-import { useCallback, useState, useMemo } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import ReactFlow, {
   Background,
   Controls,
@@ -10,164 +10,433 @@ import ReactFlow, {
   addEdge,
   Connection,
   ConnectionMode,
+  NodeChange,
+  EdgeChange,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import TaskCard from "./TaskCard";
-import TaskDetailsDialog from "./TaskDetailsDialog";
-import { useRelease } from "@/hooks/useReleases";
+import TaskNode from "./TaskNode";
+import { Button } from "./ui/button";
+import { Plus, Save, ArrowLeft } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Textarea } from "./ui/textarea";
 
 const nodeTypes = {
   task: ({ data }: any) => (
-    <TaskCard
+    <TaskNode
       id={data.id}
       title={data.title}
+      description={data.description}
       status={data.status}
       owner={data.owner}
       required={data.required}
-      priority={data.priority}
-      evidenceCount={data.evidenceCount}
-      onClick={data.onClick}
+      onDelete={data.onDelete}
+      onToggle={data.onToggle}
     />
   ),
 };
 
 interface TaskFlowCanvasProps {
   releaseId: string;
-  envId: "staging" | "uat" | "prod";
+  stageId: string;
   environmentName: string;
+  onBack: () => void;
 }
 
-export default function TaskFlowCanvas({ releaseId, envId, environmentName }: TaskFlowCanvasProps) {
-  const [selectedTask, setSelectedTask] = useState<{ id: string; title: string } | null>(null);
-  const { data: release, isLoading } = useRelease(releaseId);
-  
+export default function TaskFlowCanvas({ releaseId, stageId, environmentName, onBack }: TaskFlowCanvasProps) {
+  const { toast } = useToast();
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDescription, setNewTaskDescription] = useState("");
+  const [newTaskOwner, setNewTaskOwner] = useState("");
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Fetch stage data including tasks
+  const { data: stage } = useQuery<any>({
+    queryKey: ['/api/stages', stageId],
+    enabled: !!stageId,
+  });
+
+  // Fetch saved diagram layout for tasks
+  const { data: diagram } = useQuery<{ layout?: { nodes?: any[]; edges?: any[] } }>({
+    queryKey: ['/api/stages', stageId, 'task-diagram'],
+    enabled: !!stageId,
+  });
+
   const tasks = useMemo(() => {
-    if (!release?.stages) return [];
-    
-    const stage = release.stages.find((s: any) => s.env === envId);
-    if (!stage?.tasks) return [];
-    
-    return stage.tasks.map((task: any) => ({
-      id: task.id,
-      title: task.title,
-      status: task.status as "todo" | "doing" | "done" | "na",
-      owner: task.owner,
-      required: task.required,
-      priority: undefined as "P1" | "P2" | "P3" | undefined, // Priority not in schema yet
-      evidenceCount: task.evidenceUrl ? 1 : 0,
-    }));
-  }, [release, envId]);
+    return stage?.tasks || [];
+  }, [stage]);
 
-  const initialNodes: Node[] = useMemo(() => {
-    if (tasks.length === 0) return [];
-    
-    const nodeSpacing = 360;
-    const startX = 150;
-    const centerY = 250;
-
-    return tasks.map((task, index) => ({
-      id: task.id,
-      type: "task",
-      position: { x: startX + (index * nodeSpacing), y: centerY },
-      data: {
-        ...task,
-        onClick: () => setSelectedTask({ id: task.id, title: task.title }),
-      },
-    }));
-  }, [tasks]);
-
-  const initialEdges: Edge[] = useMemo(() => {
-    return tasks.slice(0, -1).map((task, index) => {
-      const nextTask = tasks[index + 1];
-      const isCompleted = task.status === "done";
-      
-      return {
-        id: `${task.id}-${nextTask.id}`,
-        source: task.id,
-        target: nextTask.id,
-        type: "straight",
-        animated: isCompleted,
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: isCompleted ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))",
-        },
-        style: { 
-          stroke: isCompleted ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))", 
-          strokeWidth: 3,
-        },
-      };
+  // Handler functions (defined early to use in initialNodes)
+  const handleDeleteTask = useCallback((taskId: string) => {
+    fetch(`/api/tasks/${taskId}`, {
+      method: "DELETE",
+      credentials: "include",
+    }).then((response) => {
+      if (response.ok) {
+        toast({
+          title: "Task deleted",
+          description: "Task has been removed successfully.",
+        });
+        queryClient.invalidateQueries({ queryKey: ['/api/stages', stageId] });
+      }
     });
-  }, [tasks]);
+  }, [stageId, toast]);
 
-  const [nodes, , onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const handleToggleTask = useCallback((taskId: string, currentStatus: string) => {
+    const nextStatus = currentStatus === "done" ? "todo" : currentStatus === "todo" ? "in_progress" : "done";
+    fetch(`/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: nextStatus }),
+      credentials: "include",
+    }).then((response) => {
+      if (response.ok) {
+        queryClient.invalidateQueries({ queryKey: ['/api/stages', stageId] });
+      }
+    });
+  }, [stageId]);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+
+  // Sync nodes and edges with tasks and diagram data
+  useEffect(() => {
+    if (!tasks || tasks.length === 0) {
+      setNodes([]);
+      setEdges([]);
+      return;
+    }
+
+    // Check if we have saved diagram positions
+    const savedNodes = diagram?.layout?.nodes;
+    const savedEdges = diagram?.layout?.edges;
+
+    if (savedNodes && savedNodes.length > 0) {
+      // Use saved positions and update with current task data
+      const updatedNodes = savedNodes.map((savedNode: any) => {
+        const task = tasks.find((t: any) => t.id === savedNode.id);
+        if (task) {
+          return {
+            ...savedNode,
+            data: {
+              ...savedNode.data,
+              id: task.id,
+              title: task.title,
+              description: task.description,
+              status: task.status,
+              owner: task.owner,
+              required: task.required,
+              onDelete: handleDeleteTask,
+              onToggle: handleToggleTask,
+            },
+          };
+        }
+        return savedNode;
+      }).filter((node: any) => {
+        // Remove nodes for tasks that no longer exist
+        return tasks.some((t: any) => t.id === node.id);
+      });
+
+      // Add nodes for new tasks that weren't in saved diagram
+      const existingTaskIds = new Set(updatedNodes.map((n: any) => n.id));
+      const newTaskNodes = tasks
+        .filter((task: any) => !existingTaskIds.has(task.id))
+        .map((task: any, index: number) => ({
+          id: task.id,
+          type: "task",
+          position: { x: 100 + (index % 3) * 350, y: 100 + Math.floor(index / 3) * 200 },
+          data: {
+            id: task.id,
+            title: task.title,
+            description: task.description,
+            status: task.status,
+            owner: task.owner,
+            required: task.required,
+            onDelete: handleDeleteTask,
+            onToggle: handleToggleTask,
+          },
+        }));
+
+      setNodes([...updatedNodes, ...newTaskNodes]);
+      setEdges(savedEdges || []);
+    } else {
+      // No saved diagram, create fresh nodes with default positions
+      const newNodes = tasks.map((task: any, index: number) => ({
+        id: task.id,
+        type: "task",
+        position: { x: 100 + (index % 3) * 350, y: 100 + Math.floor(index / 3) * 200 },
+        data: {
+          id: task.id,
+          title: task.title,
+          description: task.description,
+          status: task.status,
+          owner: task.owner,
+          required: task.required,
+          onDelete: handleDeleteTask,
+          onToggle: handleToggleTask,
+        },
+      }));
+      setNodes(newNodes);
+      setEdges([]);
+    }
+  }, [tasks, diagram, handleDeleteTask, handleToggleTask]);
+
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      onNodesChange(changes);
+      setHasUnsavedChanges(true);
+    },
+    [onNodesChange]
+  );
+
+  const handleEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      onEdgesChange(changes);
+      setHasUnsavedChanges(true);
+    },
+    [onEdgesChange]
+  );
 
   const onConnect = useCallback(
     (params: Connection) => {
-      const newEdge = {
-        ...params,
-        type: "straight",
-        animated: false,
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: "hsl(var(--primary))",
-        },
-        style: { 
-          stroke: "hsl(var(--primary))", 
-          strokeWidth: 3,
-        },
-      };
-      setEdges((eds) => addEdge(newEdge, eds));
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...params,
+            type: "smoothstep",
+            animated: true,
+            markerEnd: { type: MarkerType.ArrowClosed },
+          },
+          eds
+        )
+      );
+      setHasUnsavedChanges(true);
     },
     [setEdges]
   );
 
-  if (isLoading) {
-    return (
-      <div className="w-full h-full bg-background flex items-center justify-center" data-testid="task-flow-canvas">
-        <div className="text-muted-foreground">Loading tasks...</div>
-      </div>
-    );
-  }
+  // Save diagram mutation
+  const saveDiagram = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/stages/${stageId}/task-diagram`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          layout: {
+            nodes: nodes.map((node) => ({
+              ...node,
+              data: {
+                id: node.data.id,
+                title: node.data.title,
+                description: node.data.description,
+                status: node.data.status,
+                owner: node.data.owner,
+                required: node.data.required,
+              },
+            })),
+            edges,
+          },
+        }),
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to save diagram");
+      return response.json();
+    },
+    onSuccess: () => {
+      setHasUnsavedChanges(false);
+      toast({
+        title: "Layout saved",
+        description: "Task canvas layout has been saved successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/stages', stageId, 'task-diagram'] });
+    },
+    onError: () => {
+      toast({
+        title: "Failed to save",
+        description: "Could not save the task canvas layout.",
+        variant: "destructive",
+      });
+    },
+  });
 
-  if (tasks.length === 0) {
-    return (
-      <div className="w-full h-full bg-background flex items-center justify-center" data-testid="task-flow-canvas">
-        <div className="text-muted-foreground">No tasks found for this environment</div>
-      </div>
-    );
-  }
+  // Add task mutation
+  const addTask = useMutation({
+    mutationFn: async (newTask: { title: string; description?: string; owner?: string }) => {
+      const response = await fetch(`/api/releases/${releaseId}/stages/${stageId}/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newTask),
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to add task");
+      return response.json();
+    },
+    onSuccess: () => {
+      setIsAddDialogOpen(false);
+      setNewTaskTitle("");
+      setNewTaskDescription("");
+      setNewTaskOwner("");
+      toast({
+        title: "Task added",
+        description: "New task has been created successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/stages', stageId] });
+    },
+    onError: () => {
+      toast({
+        title: "Failed to add task",
+        description: "Could not create the task.",
+        variant: "destructive",
+      });
+    },
+  });
+
+
+  const handleAddTask = () => {
+    if (!newTaskTitle.trim()) return;
+    
+    addTask.mutate({
+      title: newTaskTitle,
+      description: newTaskDescription || undefined,
+      owner: newTaskOwner || undefined,
+    });
+  };
 
   return (
     <>
-      <div className="w-full h-full bg-background" data-testid="task-flow-canvas">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          nodeTypes={nodeTypes}
-          connectionMode={ConnectionMode.Loose}
-          fitView
-          minZoom={0.3}
-          maxZoom={1.2}
-          defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
-          proOptions={{ hideAttribution: true }}
-        >
-          <Background />
-          <Controls />
-        </ReactFlow>
+      <div className="w-full h-full bg-background flex flex-col" data-testid="task-flow-canvas">
+        {/* Header */}
+        <div className="border-b p-4 flex items-center justify-between bg-card">
+          <div className="flex items-center gap-3">
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={onBack}
+              data-testid="button-back-to-release"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <h2 className="text-lg font-semibold">{environmentName}</h2>
+              <p className="text-sm text-muted-foreground">Task Flow</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => setIsAddDialogOpen(true)}
+              data-testid="button-add-task"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Add Task
+            </Button>
+            {hasUnsavedChanges && (
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => saveDiagram.mutate()}
+                disabled={saveDiagram.isPending}
+                data-testid="button-save-task-layout"
+              >
+                <Save className="h-4 w-4 mr-1" />
+                {saveDiagram.isPending ? "Saving..." : "Save Layout"}
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Canvas */}
+        <div className="flex-1">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={handleNodesChange}
+            onEdgesChange={handleEdgesChange}
+            onConnect={onConnect}
+            nodeTypes={nodeTypes}
+            connectionMode={ConnectionMode.Loose}
+            nodesDraggable={true}
+            nodesConnectable={true}
+            elementsSelectable={true}
+            minZoom={0.3}
+            maxZoom={2}
+            defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+            proOptions={{ hideAttribution: true }}
+          >
+            <Background />
+            <Controls />
+          </ReactFlow>
+        </div>
       </div>
 
-      {selectedTask && (
-        <TaskDetailsDialog
-          open={!!selectedTask}
-          onOpenChange={(open) => !open && setSelectedTask(null)}
-          taskTitle={selectedTask.title}
-          taskId={selectedTask.id}
-        />
-      )}
+      {/* Add Task Dialog */}
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <DialogContent data-testid="dialog-add-task">
+          <DialogHeader>
+            <DialogTitle>Add Task</DialogTitle>
+            <DialogDescription>
+              Create a new task for this environment stage
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="task-title">Task Title *</Label>
+              <Input
+                id="task-title"
+                value={newTaskTitle}
+                onChange={(e) => setNewTaskTitle(e.target.value)}
+                placeholder="e.g., Deploy database migrations"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newTaskTitle.trim() && !e.shiftKey) {
+                    handleAddTask();
+                  }
+                }}
+                data-testid="input-task-title"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="task-description">Description</Label>
+              <Textarea
+                id="task-description"
+                value={newTaskDescription}
+                onChange={(e) => setNewTaskDescription(e.target.value)}
+                placeholder="Additional details about this task..."
+                data-testid="input-task-description"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="task-owner">Owner</Label>
+              <Input
+                id="task-owner"
+                value={newTaskOwner}
+                onChange={(e) => setNewTaskOwner(e.target.value)}
+                placeholder="e.g., john@example.com"
+                data-testid="input-task-owner"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddTask} disabled={!newTaskTitle.trim() || addTask.isPending} data-testid="button-confirm-add-task">
+              {addTask.isPending ? "Adding..." : "Add Task"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

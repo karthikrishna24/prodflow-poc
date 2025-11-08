@@ -1,13 +1,14 @@
 import { useState } from "react";
 import ReleaseListPanel from "@/components/ReleaseListPanel";
 import EnvironmentFlowCanvas from "@/components/EnvironmentFlowCanvas";
-import StageDetailPanel from "@/components/StageDetailPanel";
+import TaskFlowCanvas from "@/components/TaskFlowCanvas";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useLocation, useRoute } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Anchor, LogOut, Users, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTeams } from "@/hooks/useTeams";
+import { useRelease } from "@/hooks/useReleases";
 
 export default function Dashboard() {
   const [, params] = useRoute<{ projectId: string }>("/project/:projectId");
@@ -16,19 +17,26 @@ export default function Dashboard() {
   const [selectedStage, setSelectedStage] = useState<string | null>(null);
   const { user, logoutMutation } = useAuth();
   const { data: teams = [] } = useTeams();
+  const { data: release } = useRelease(selectedRelease);
   const projectId = params?.projectId;
   const currentProject = teams.find(t => t.id === projectId);
 
+  // Get environment name from selected stage
+  const selectedStageData = selectedStage && release?.stages 
+    ? release.stages.find((s: any) => s.id === selectedStage) 
+    : null;
+  const environmentName = selectedStageData?.environment?.name || "Environment";
+
   const handleReleaseClick = (releaseId: string) => {
     setSelectedRelease(releaseId);
-    setSelectedStage(null); // Close stage panel when switching releases
+    setSelectedStage(null); // Close task canvas when switching releases
   };
 
   const handleEnvironmentClick = (stageId: string) => {
     setSelectedStage(stageId);
   };
 
-  const handleCloseStagePanel = () => {
+  const handleBackToRelease = () => {
     setSelectedStage(null);
   };
 
@@ -90,9 +98,16 @@ export default function Dashboard() {
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        <ReleaseListPanel projectId={projectId} onReleaseClick={handleReleaseClick} />
+        {!selectedStage && <ReleaseListPanel projectId={projectId} onReleaseClick={handleReleaseClick} />}
         <div className="flex-1">
-          {selectedRelease ? (
+          {selectedRelease && selectedStage ? (
+            <TaskFlowCanvas
+              releaseId={selectedRelease}
+              stageId={selectedStage}
+              environmentName={environmentName}
+              onBack={handleBackToRelease}
+            />
+          ) : selectedRelease ? (
             <EnvironmentFlowCanvas releaseId={selectedRelease} onEnvironmentClick={handleEnvironmentClick} />
           ) : (
             <div className="h-full flex items-center justify-center text-muted-foreground">
@@ -104,14 +119,6 @@ export default function Dashboard() {
             </div>
           )}
         </div>
-        
-        {/* Stage Detail Panel */}
-        <StageDetailPanel
-          stageId={selectedStage}
-          releaseId={selectedRelease}
-          isOpen={!!selectedStage}
-          onClose={handleCloseStagePanel}
-        />
       </div>
     </div>
   );
