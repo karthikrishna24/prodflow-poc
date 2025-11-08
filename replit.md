@@ -1,16 +1,46 @@
-# Shipyard - Release Management Dashboard
+# DockVoyage - Multi-Tenant Release Management Platform
 
 ## Overview
 
-Shipyard is a production-ready release management dashboard featuring the CargoCat mascot as your trusted dockmaster. The application provides user authentication, release tracking across environments (staging, UAT, production), and status filtering with a complete nautical theme throughout the UI. Future features will incorporate CargoCat in chatbot and email notifications.
+DockVoyage is a production-ready multi-tenant release management platform with nautical theming and anchor branding. The application provides workspace/team-based organization, user authentication, release tracking with custom environments, and complete RBAC (Role-Based Access Control). Built for both individual users and organizations with secure data isolation.
 
-**Branding**: Shipyard with CargoCat dockmaster mascot - complete nautical/maritime theme with ocean-inspired colors and terminology.
+**Domain**: dockvoyage.com  
+**Tagline**: "See your releases clearly"  
+**Branding**: Anchor icon with nautical/maritime theme
 
 ## User Preferences
 
 - Preferred communication style: Simple, everyday language
-- Design preference: Nautical theme with CargoCat mascot, no emojis (use icons instead)
-- Default environments: staging, UAT, production (auto-created with releases)
+- Design preference: Nautical theme with anchor icon, no emojis in UI (use lucide-react icons)
+- Architecture: Multi-tenant with workspaces → teams → releases → environments → stages
+
+## Recent Changes (November 8, 2025)
+
+### Email Invitation System ✅
+- **Workspace type selection**: Signup flow now asks users to select individual vs organization workspace
+- **Resend integration**: Email service configured for transactional emails with nautical branding
+- **Invitation APIs**: Secure backend endpoints for creating, listing, and accepting invitations
+  - Admin-only access: Only workspace admins can send/view invitations
+  - Input validation: All invitation data validated with Zod schemas
+  - Token sanitization: Sensitive tokens removed from API responses
+- **Team Management UI**: New page for workspace admins to invite team members via email
+- **Nautical-themed emails**: HTML email template with DockVoyage anchor branding
+- **Public invitation flow**: Accept page allows invited users to join workspaces
+- **URL generation**: Invitation links use request host for proper email delivery
+
+### Session Handling Fix ✅
+- **Fixed session deserialization errors** that prevented app from loading
+- Updated Passport deserializeUser to gracefully handle missing users (returns null instead of throwing)
+- Cleared invalid sessions from database after migration
+- App now loads cleanly without session-related errors
+
+### Multi-Tenant Architecture Migration ✅
+- **Complete database redesign** with workspaces, teams, members, environments, and flows
+- **Auto-provisioning**: New users automatically get workspace + team + 3 default environments
+- **RBAC implementation**: Workspace admins, team admins, and member roles
+- **Custom environments**: Teams can create their own environments (not hardcoded to staging/UAT/prod)
+- **Security hardening**: ALL endpoints now enforce authentication + team ownership validation
+- **Data isolation**: Users can only access releases within their workspace's teams
 
 ## Recent Changes (November 7, 2025)
 
@@ -34,9 +64,9 @@ Shipyard is a production-ready release management dashboard featuring the CargoC
 - Updated all UI text to use nautical terminology:
   - Releases → Voyages
   - Environments → Cargo Holds
-  - Agent/Assistant → Dockmaster (CargoCat)
-- Added CargoCat mascot branding to authentication page
-- Removed all emojis in favor of nautical icons
+  - Agent/Assistant → Dockmaster
+- Added anchor icon branding to authentication page
+- Removed all emojis in favor of lucide-react icons
 
 ## System Architecture
 
@@ -60,7 +90,7 @@ Shipyard is a production-ready release management dashboard featuring the CargoC
 - Typography system using Inter (UI) and JetBrains Mono (code/IDs) fonts
 
 **Authentication Flow**
-- Split-screen login/signup page with CargoCat mascot introduction
+- Split-screen login/signup page with anchor branding
 - Protected route wrapper requiring authentication
 - Automatic redirect to auth page for unauthenticated users
 - Session persistence across page refreshes
@@ -106,20 +136,32 @@ Shipyard is a production-ready release management dashboard featuring the CargoC
 ### Data Storage
 
 **Database Schema**
-- **users**: Authentication and user management (id, username, password)
-- **releases**: Top-level release entities with name, version, team, and change window
-- **stages**: Environment-specific deployment stages (staging, UAT, prod) linked to releases
-- **tasks**: Actionable items within stages with status, owner, and evidence tracking
-- **blockers**: Issues preventing stage progression with severity levels (P1, P2, P3)
-- **diagrams**: Visual layout persistence for flow canvas (planned)
-- **diagramNodes**: Node positions and metadata for diagram persistence (planned)
-- **activityLog**: Audit trail of changes and approvals (planned)
+
+**Multi-Tenant Core:**
+- **workspaces**: Top-level tenant containers (id, name, type: individual/organization, slug)
+- **workspaceMembers**: User→workspace membership with roles (admin/member)
+- **teams**: Groups within workspaces that own releases (id, name, description)
+- **teamMembers**: User→team membership with roles (admin/member)
+- **invitations**: Email invites for team collaboration (pending implementation)
+
+**Release Management:**
+- **releases**: Voyages within teams (id, teamId, name, version, changeWindow)
+- **environments**: Custom deployment targets per team (id, teamId, name, sortOrder)
+- **stages**: Release progress through environments (releaseId, environmentId, status, approver)
+- **flows**: Task groupings within environments (environmentId, name, sortOrder)
+- **tasks**: Actionable items within stages (stageId, flowId, title, owner, status, evidence)
+- **blockers**: Issues preventing stage progression (stageId, severity: P1/P2/P3, active)
+- **activityLog**: Audit trail of all changes (workspaceId, releaseId, stageId, actor, action)
 
 **Enums for Type Safety**
-- Environment types: staging, uat, prod
+- Workspace types: individual, organization
+- Workspace member roles: admin, member
+- Workspace member status: active, inactive
+- Team member roles: admin, member
 - Stage statuses: not_started, in_progress, blocked, done
 - Task statuses: todo, doing, done, na
 - Blocker severity: P1, P2, P3
+- Invitation status: pending, accepted, expired
 
 **Session Storage**
 - PostgreSQL-backed session store using connect-pg-simple
@@ -160,7 +202,7 @@ Shipyard is a production-ready release management dashboard featuring the CargoC
 - Google Fonts: Inter and JetBrains Mono via CDN link in HTML
 
 **Planned Integrations** (not yet implemented)
-- Slack/Teams webhooks for CargoCat notifications
+- Slack/Teams webhooks for release notifications
 - GitHub/GitLab API for CI/CD status linking
 - S3-compatible storage for evidence attachments
 - Real-time collaboration via WebSockets
@@ -173,7 +215,7 @@ Shipyard is a production-ready release management dashboard featuring the CargoC
 ✅ Release creation and listing
 ✅ Release filtering by status (ongoing/finished/failed)
 ✅ Automatic environment creation (staging, UAT, production)
-✅ Shipyard nautical branding with CargoCat mascot
+✅ Shipyard nautical branding with anchor icon
 ✅ Ocean-inspired color palette
 ✅ Responsive UI with shadcn components
 
@@ -183,8 +225,8 @@ Shipyard is a production-ready release management dashboard featuring the CargoC
 - Blocker tracking and resolution
 - Activity log and audit trail
 - Real-time collaboration
-- CargoCat chatbot for release assistance
-- Email notifications with CargoCat branding
+- Chatbot assistant for release help
+- Email notifications with nautical branding
 - Evidence attachment storage
 
 ## Environment Variables
@@ -205,4 +247,4 @@ After authentication, users can:
 - Create new releases (voyages)
 - View all releases in the sidebar
 - Filter releases by status
-- See CargoCat mascot branding throughout
+- Experience nautical-themed interface with anchor branding

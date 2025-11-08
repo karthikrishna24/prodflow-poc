@@ -2,12 +2,126 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
-import { insertReleaseSchema, insertStageSchema, insertTaskSchema, insertBlockerSchema } from "@shared/schema";
+import { insertReleaseSchema, insertStageSchema, insertTaskSchema, insertBlockerSchema, insertWorkspaceInvitationSchema } from "@shared/schema";
 import { z } from "zod";
+import { randomBytes } from "crypto";
+import { sendInvitationEmail } from "./email";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Helper: Get user's teams and validate access
+  async function getUserTeams(userId: string) {
+    const workspaces = await storage.getWorkspacesByUser(userId);
+    if (workspaces.length === 0) return [];
+    const teams = await storage.getTeamsByWorkspace(workspaces[0].id);
+    return teams;
+  }
+  
+  async function validateTeamAccess(userId: string, teamId: string) {
+    const teams = await getUserTeams(userId);
+    return teams.some(t => t.id === teamId);
+  }
+
   // Setup authentication routes
   setupAuth(app);
+
+  // Workspaces
+  app.get("/api/workspaces", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      const workspaces = await storage.getWorkspacesByUser(req.user!.id);
+      res.json(workspaces);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Teams (Projects)
+  app.get("/api/teams", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const workspaces = await storage.getWorkspacesByUser(req.user!.id);
+      if (workspaces.length === 0) {
+        return res.json([]);
+      }
+      
+      const teams = await storage.getTeamsByWorkspace(workspaces[0].id);
+      res.json(teams);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/teams", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const workspaces = await storage.getWorkspacesByUser(req.user!.id);
+      if (workspaces.length === 0) {
+        return res.status(400).json({ message: "No workspace found" });
+      }
+      
+      const { name, description } = req.body;
+      if (!name) {
+        return res.status(400).json({ message: "Team name is required" });
+      }
+      
+      const team = await storage.createTeam({
+        workspaceId: workspaces[0].id,
+        name,
+        description: description || null,
+      });
+      
+      // Create default environments for the new team
+      const defaultEnvs = [
+        { name: "Staging", sortOrder: "1" },
+        { name: "UAT", sortOrder: "2" },
+        { name: "Production", sortOrder: "3" },
+      ];
+      
+      for (const env of defaultEnvs) {
+        await storage.createEnvironment({
+          teamId: team.id,
+          name: env.name,
+          sortOrder: env.sortOrder,
+          isDefault: true,
+        });
+      }
+      
+      res.status(201).json(team);
+    } catch (error: any) {
+      if (error.code === '23505') { // Unique constraint violation
+        return res.status(400).json({ message: "A project with this name already exists" });
+      }
+      next(error);
+    }
+  });
+
+  app.delete("/api/teams/:id", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const workspaces = await storage.getWorkspacesByUser(req.user!.id);
+      if (workspaces.length === 0) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const team = await storage.getTeam(req.params.id);
+      if (!team) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+      
+      // Verify team belongs to user's workspace
+      if (team.workspaceId !== workspaces[0].id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      await storage.deleteTeam(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  });
 
   // Health check endpoint
   app.get("/api/health", async (req, res) => {
@@ -28,18 +142,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Releases
   app.get("/api/releases", async (req, res, next) => {
     try {
-      const team = req.query.team as string | undefined;
-      const status = req.query.status as string | undefined;
-      const releases = await storage.getReleases({ team, status });
+      if (!req.isAuthenticated()) return res.sendStatus(401);
       
-      // Attach stages and blockers to each release for filtering
+      // Get user's workspaces and teams
+      const workspaces = await storage.getWorkspacesByUser(req.user!.id);
+      if (workspaces.length === 0) {
+        return res.json([]);
+      }
+      
+      const teams = await storage.getTeamsByWorkspace(workspaces[0].id);
+      if (teams.length === 0) {
+        return res.json([]);
+      }
+      
+      // Validate teamId if provided
+      const requestedTeamId = req.query.teamId as string | undefined;
+      const teamId = requestedTeamId || teams[0].id;
+      
+      // Security: Verify teamId belongs to user's workspace
+      const hasAccess = teams.some(t => t.id === teamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied to this team" });
+      }
+      
+      const releases = await storage.getReleases({ teamId });
+      
+      // Attach stages, environments, and blockers to each release for filtering
       const releasesWithStages = await Promise.all(
         releases.map(async (release) => {
           const stages = await storage.getStagesByRelease(release.id);
           const stagesWithBlockers = await Promise.all(
             stages.map(async (stage) => {
+              const environment = await storage.getEnvironment(stage.environmentId);
               const blockers = await storage.getBlockersByStage(stage.id, true);
-              return { ...stage, blockers };
+              return { ...stage, environment, blockers };
             })
           );
           return { ...release, stages: stagesWithBlockers };
@@ -54,9 +190,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/releases/:id", async (req, res, next) => {
     try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
       const release = await storage.getRelease(req.params.id);
       if (!release) {
         return res.status(404).json({ message: "Release not found" });
+      }
+      
+      // Verify user has access to this release's team
+      const hasAccess = await validateTeamAccess(req.user!.id, release.teamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied" });
       }
       
       // Get stages for this release
@@ -79,23 +223,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/releases", async (req, res, next) => {
     try {
-      const data = insertReleaseSchema.parse(req.body);
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      // Get user's workspaces and teams
+      const workspaces = await storage.getWorkspacesByUser(req.user!.id);
+      if (workspaces.length === 0) {
+        return res.status(400).json({ message: "No workspace found" });
+      }
+      
+      const teams = await storage.getTeamsByWorkspace(workspaces[0].id);
+      if (teams.length === 0) {
+        return res.status(400).json({ message: "No team found" });
+      }
+      
+      // Determine teamId and validate authorization
+      const requestedTeamId = req.body.teamId || teams[0].id;
+      
+      // Security: Verify teamId belongs to user's workspace
+      const hasAccess = teams.some(t => t.id === requestedTeamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied to this team" });
+      }
+      
+      const data = insertReleaseSchema.parse({
+        ...req.body,
+        teamId: requestedTeamId,
+        createdBy: req.user!.id,
+      });
+      
       const release = await storage.createRelease(data);
       
-      // Create default stages for the release
-      const defaultEnvs = ["staging", "uat", "prod"] as const;
-      for (const env of defaultEnvs) {
+      // Get default environments for this team and create stages
+      const environments = await storage.getEnvironmentsByTeam(data.teamId);
+      for (const environment of environments) {
         await storage.createStage({
           releaseId: release.id,
-          env,
+          environmentId: environment.id,
           status: "not_started",
         });
       }
       
       // Log activity
       await storage.createActivityLog({
+        workspaceId: workspaces[0].id,
         releaseId: release.id,
-        actor: data.createdBy || "system",
+        actor: req.user!.username,
         action: "release.created",
         meta: { releaseName: release.name },
       });
@@ -106,7 +278,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Validation error", errors: error.errors });
       }
-      // Log database errors
       if (error.code) {
         console.error("Database error code:", error.code);
       }
@@ -119,11 +290,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/releases/:id", async (req, res, next) => {
     try {
-      const data = insertReleaseSchema.partial().parse(req.body);
-      const release = await storage.updateRelease(req.params.id, data);
-      if (!release) {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const existing = await storage.getRelease(req.params.id);
+      if (!existing) {
         return res.status(404).json({ message: "Release not found" });
       }
+      
+      const hasAccess = await validateTeamAccess(req.user!.id, existing.teamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const data = insertReleaseSchema.partial().parse(req.body);
+      const release = await storage.updateRelease(req.params.id, data);
       res.json(release);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -135,10 +315,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/releases/:id", async (req, res, next) => {
     try {
-      const deleted = await storage.deleteRelease(req.params.id);
-      if (!deleted) {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const existing = await storage.getRelease(req.params.id);
+      if (!existing) {
         return res.status(404).json({ message: "Release not found" });
       }
+      
+      const hasAccess = await validateTeamAccess(req.user!.id, existing.teamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      await storage.deleteRelease(req.params.id);
       res.status(204).send();
     } catch (error) {
       next(error);
@@ -148,9 +337,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Stages
   app.get("/api/stages/:id", async (req, res, next) => {
     try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
       const stage = await storage.getStage(req.params.id);
       if (!stage) {
         return res.status(404).json({ message: "Stage not found" });
+      }
+      
+      const release = await storage.getRelease(stage.releaseId);
+      if (!release || !(await validateTeamAccess(req.user!.id, release.teamId))) {
+        return res.status(403).json({ message: "Access denied" });
       }
       
       const tasks = await storage.getTasksByStage(stage.id);
@@ -164,17 +360,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/stages/:id", async (req, res, next) => {
     try {
-      const data = insertStageSchema.partial().parse(req.body);
-      const stage = await storage.updateStage(req.params.id, data);
-      if (!stage) {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const existing = await storage.getStage(req.params.id);
+      if (!existing) {
         return res.status(404).json({ message: "Stage not found" });
       }
       
+      const release = await storage.getRelease(existing.releaseId);
+      if (!release || !(await validateTeamAccess(req.user!.id, release.teamId))) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const data = insertStageSchema.partial().parse(req.body);
+      const stage = await storage.updateStage(req.params.id, data);
+      
       // Log activity
       await storage.createActivityLog({
-        releaseId: stage.releaseId,
-        stageId: stage.id,
-        actor: "system",
+        workspaceId: (await storage.getWorkspacesByUser(req.user!.id))[0]?.id,
+        releaseId: stage!.releaseId,
+        stageId: stage!.id,
+        actor: req.user!.username,
         action: "stage.updated",
         meta: { changes: data },
       });
@@ -190,9 +396,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/stages/:id/approve", async (req, res, next) => {
     try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
       const stage = await storage.getStage(req.params.id);
       if (!stage) {
         return res.status(404).json({ message: "Stage not found" });
+      }
+      
+      const release = await storage.getRelease(stage.releaseId);
+      if (!release || !(await validateTeamAccess(req.user!.id, release.teamId))) {
+        return res.status(403).json({ message: "Access denied" });
       }
       
       const { approver, note } = req.body;
@@ -217,9 +430,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Log activity
       await storage.createActivityLog({
+        workspaceId: (await storage.getWorkspacesByUser(req.user!.id))[0]?.id,
         releaseId: stage.releaseId,
         stageId: stage.id,
-        actor: approver || "system",
+        actor: approver || req.user!.username,
         action: "stage.approved",
         meta: { note },
       });
@@ -233,9 +447,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Tasks
   app.post("/api/stages/:stageId/tasks", async (req, res, next) => {
     try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
       const stage = await storage.getStage(req.params.stageId);
       if (!stage) {
         return res.status(404).json({ message: "Stage not found" });
+      }
+      
+      const release = await storage.getRelease(stage.releaseId);
+      if (!release || !(await validateTeamAccess(req.user!.id, release.teamId))) {
+        return res.status(403).json({ message: "Access denied" });
       }
       
       const data = insertTaskSchema.parse({ ...req.body, stageId: req.params.stageId });
@@ -243,9 +464,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Log activity
       await storage.createActivityLog({
+        workspaceId: (await storage.getWorkspacesByUser(req.user!.id))[0]?.id,
         releaseId: stage.releaseId,
         stageId: stage.id,
-        actor: "system",
+        actor: req.user!.username,
         action: "task.created",
         meta: { taskId: task.id, taskTitle: task.title },
       });
@@ -261,25 +483,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/tasks/:id", async (req, res, next) => {
     try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
       const task = await storage.getTask(req.params.id);
       if (!task) {
         return res.status(404).json({ message: "Task not found" });
       }
       
+      const stage = await storage.getStage(task.stageId);
+      if (!stage) return res.sendStatus(404);
+      
+      const release = await storage.getRelease(stage.releaseId);
+      if (!release || !(await validateTeamAccess(req.user!.id, release.teamId))) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
       const data = insertTaskSchema.partial().parse(req.body);
       const updatedTask = await storage.updateTask(req.params.id, data);
       
-      // Get stage for logging
-      const stage = await storage.getStage(task.stageId);
-      if (stage) {
-        await storage.createActivityLog({
-          releaseId: stage.releaseId,
-          stageId: stage.id,
-          actor: "system",
-          action: "task.updated",
-          meta: { taskId: task.id, changes: data },
-        });
-      }
+      await storage.createActivityLog({
+        workspaceId: (await storage.getWorkspacesByUser(req.user!.id))[0]?.id,
+        releaseId: stage.releaseId,
+        stageId: stage.id,
+        actor: req.user!.username,
+        action: "task.updated",
+        meta: { taskId: task.id, changes: data },
+      });
       
       res.json(updatedTask);
     } catch (error) {
@@ -292,10 +521,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/tasks/:id", async (req, res, next) => {
     try {
-      const deleted = await storage.deleteTask(req.params.id);
-      if (!deleted) {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const task = await storage.getTask(req.params.id);
+      if (!task) {
         return res.status(404).json({ message: "Task not found" });
       }
+      
+      const stage = await storage.getStage(task.stageId);
+      if (!stage) return res.sendStatus(404);
+      
+      const release = await storage.getRelease(stage.releaseId);
+      if (!release || !(await validateTeamAccess(req.user!.id, release.teamId))) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      await storage.deleteTask(req.params.id);
       res.status(204).send();
     } catch (error) {
       next(error);
@@ -305,9 +546,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Blockers
   app.post("/api/stages/:stageId/blockers", async (req, res, next) => {
     try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
       const stage = await storage.getStage(req.params.stageId);
       if (!stage) {
         return res.status(404).json({ message: "Stage not found" });
+      }
+      
+      const release = await storage.getRelease(stage.releaseId);
+      if (!release || !(await validateTeamAccess(req.user!.id, release.teamId))) {
+        return res.status(403).json({ message: "Access denied" });
       }
       
       const data = insertBlockerSchema.parse({ ...req.body, stageId: req.params.stageId });
@@ -320,9 +568,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Log activity
       await storage.createActivityLog({
+        workspaceId: (await storage.getWorkspacesByUser(req.user!.id))[0]?.id,
         releaseId: stage.releaseId,
         stageId: stage.id,
-        actor: "system",
+        actor: req.user!.username,
         action: "blocker.created",
         meta: { blockerId: blocker.id, severity: blocker.severity },
       });
@@ -338,9 +587,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/blockers/:id", async (req, res, next) => {
     try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
       const blocker = await storage.getBlocker(req.params.id);
       if (!blocker) {
         return res.status(404).json({ message: "Blocker not found" });
+      }
+      
+      const stage = await storage.getStage(blocker.stageId);
+      if (!stage) return res.sendStatus(404);
+      
+      const release = await storage.getRelease(stage.releaseId);
+      if (!release || !(await validateTeamAccess(req.user!.id, release.teamId))) {
+        return res.status(403).json({ message: "Access denied" });
       }
       
       const data = insertBlockerSchema.partial().parse(req.body);
@@ -348,26 +607,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // If blocker is resolved, check if stage should be unblocked
       if (data.active === false) {
-        const stage = await storage.getStage(blocker.stageId);
-        if (stage) {
-          const activeBlockers = await storage.getBlockersByStage(stage.id, true);
-          if (activeBlockers.length === 0 && stage.status === "blocked") {
-            await storage.updateStage(stage.id, { status: "in_progress" });
-          }
+        const activeBlockers = await storage.getBlockersByStage(stage.id, true);
+        if (activeBlockers.length === 0 && stage.status === "blocked") {
+          await storage.updateStage(stage.id, { status: "in_progress" });
         }
       }
       
-      // Get stage for logging
-      const stage = await storage.getStage(blocker.stageId);
-      if (stage) {
-        await storage.createActivityLog({
-          releaseId: stage.releaseId,
-          stageId: stage.id,
-          actor: "system",
-          action: "blocker.updated",
-          meta: { blockerId: blocker.id, changes: data },
-        });
-      }
+      await storage.createActivityLog({
+        workspaceId: (await storage.getWorkspacesByUser(req.user!.id))[0]?.id,
+        releaseId: stage.releaseId,
+        stageId: stage.id,
+        actor: req.user!.username,
+        action: "blocker.updated",
+        meta: { blockerId: blocker.id, changes: data },
+      });
       
       res.json(updatedBlocker);
     } catch (error) {
@@ -380,10 +633,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/blockers/:id", async (req, res, next) => {
     try {
-      const deleted = await storage.deleteBlocker(req.params.id);
-      if (!deleted) {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const blocker = await storage.getBlocker(req.params.id);
+      if (!blocker) {
         return res.status(404).json({ message: "Blocker not found" });
       }
+      
+      const stage = await storage.getStage(blocker.stageId);
+      if (!stage) return res.sendStatus(404);
+      
+      const release = await storage.getRelease(stage.releaseId);
+      if (!release || !(await validateTeamAccess(req.user!.id, release.teamId))) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      await storage.deleteBlocker(req.params.id);
       res.status(204).send();
     } catch (error) {
       next(error);
@@ -393,6 +658,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Diagrams
   app.get("/api/releases/:releaseId/diagram", async (req, res, next) => {
     try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const release = await storage.getRelease(req.params.releaseId);
+      if (!release) {
+        return res.status(404).json({ message: "Release not found" });
+      }
+      
+      const hasAccess = await validateTeamAccess(req.user!.id, release.teamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
       const diagram = await storage.getDiagramByRelease(req.params.releaseId);
       if (!diagram) {
         return res.status(404).json({ message: "Diagram not found" });
@@ -405,6 +682,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/releases/:releaseId/diagram", async (req, res, next) => {
     try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const release = await storage.getRelease(req.params.releaseId);
+      if (!release) {
+        return res.status(404).json({ message: "Release not found" });
+      }
+      
+      const hasAccess = await validateTeamAccess(req.user!.id, release.teamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
       const { layout } = req.body;
       const diagram = await storage.updateDiagramLayout(req.params.releaseId, layout);
       res.json(diagram);
@@ -416,8 +705,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Activity Log
   app.get("/api/activity", async (req, res, next) => {
     try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
       const releaseId = req.query.releaseId as string | undefined;
       const stageId = req.query.stageId as string | undefined;
+      
+      // Always validate access to the release
+      let release;
+      if (releaseId) {
+        release = await storage.getRelease(releaseId);
+      } else if (stageId) {
+        const stage = await storage.getStage(stageId);
+        if (stage) {
+          release = await storage.getRelease(stage.releaseId);
+        }
+      }
+      
+      if (!release) {
+        return res.status(404).json({ message: "Release not found" });
+      }
+      
+      const hasAccess = await validateTeamAccess(req.user!.id, release.teamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
       const logs = await storage.getActivityLog({ releaseId, stageId });
       res.json(logs);
     } catch (error) {
@@ -428,8 +740,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dashboard
   app.get("/api/dashboard", async (req, res, next) => {
     try {
-      const team = req.query.team as string | undefined;
-      const releases = await storage.getReleases({ team });
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const teams = await getUserTeams(req.user!.id);
+      if (teams.length === 0) {
+        return res.json([]);
+      }
+      
+      const requestedTeamId = req.query.teamId as string | undefined;
+      const teamId = requestedTeamId || teams[0].id;
+      
+      const hasAccess = teams.some(t => t.id === teamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const releases = await storage.getReleases({ teamId });
       
       // Calculate status and progress for each release
       const releasesWithStatus = await Promise.all(
@@ -470,6 +796,205 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       
       res.json({ releases: releasesWithStatus });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Workspace Invitations
+  app.post("/api/invitations", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+
+      // Validate request body
+      const validationResult = insertWorkspaceInvitationSchema.extend({
+        workspaceId: z.string(),
+      }).safeParse({
+        email: req.body.email,
+        role: req.body.role,
+        workspaceId: req.body.workspaceId,
+        inviterId: req.user!.id,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      });
+
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid invitation data",
+          errors: validationResult.error.errors,
+        });
+      }
+
+      const { email, role, workspaceId } = validationResult.data;
+
+      // Verify user has admin access to the workspace
+      const workspaces = await storage.getWorkspacesByUser(req.user!.id);
+      const workspace = workspaces.find(w => w.id === workspaceId);
+      
+      if (!workspace) {
+        return res.status(403).json({ message: "Access denied to this workspace" });
+      }
+
+      const workspaceMember = await storage.getWorkspaceMemberByUserAndWorkspace(req.user!.id, workspaceId);
+      if (!workspaceMember || workspaceMember.role !== "admin") {
+        return res.status(403).json({ message: "Only workspace admins can invite members" });
+      }
+
+      // Check if user already exists and is a member
+      const existingInvitations = await storage.getWorkspaceInvitations(workspaceId);
+      const hasPendingInvite = existingInvitations.some(
+        inv => inv.email === email && inv.status === "pending"
+      );
+      
+      if (hasPendingInvite) {
+        return res.status(400).json({ message: "An invitation has already been sent to this email" });
+      }
+
+      // Create invitation
+      const token = randomBytes(32).toString("hex");
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
+
+      const invitation = await storage.createWorkspaceInvitation({
+        workspaceId,
+        email,
+        inviterId: req.user!.id,
+        role: role || "developer",
+        token,
+        expiresAt,
+      });
+
+      // Send invitation email
+      try {
+        // Get base URL from request headers
+        const host = req.get('host');
+        await sendInvitationEmail(
+          email,
+          req.user!.username,
+          workspace.name,
+          role || "developer",
+          token,
+          host
+        );
+      } catch (emailError: any) {
+        console.error("Failed to send invitation email:", emailError);
+        // Don't fail the request if email fails, just log it
+      }
+
+      res.status(201).json(invitation);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/invitations", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+
+      const workspaces = await storage.getWorkspacesByUser(req.user!.id);
+      if (workspaces.length === 0) {
+        return res.json([]);
+      }
+
+      // Verify user is an admin of the workspace
+      const workspaceMember = await storage.getWorkspaceMemberByUserAndWorkspace(
+        req.user!.id,
+        workspaces[0].id
+      );
+      if (!workspaceMember || workspaceMember.role !== "admin") {
+        return res.status(403).json({ message: "Only workspace admins can view invitations" });
+      }
+
+      const invitations = await storage.getWorkspaceInvitations(workspaces[0].id);
+      
+      // Remove sensitive token data from response
+      const sanitizedInvitations = invitations.map(inv => ({
+        id: inv.id,
+        email: inv.email,
+        role: inv.role,
+        status: inv.status,
+        createdAt: inv.createdAt,
+        acceptedAt: inv.acceptedAt,
+        expiresAt: inv.expiresAt,
+      }));
+      
+      res.json(sanitizedInvitations);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/invitations/:token", async (req, res, next) => {
+    try {
+      const { token } = req.params;
+      const invitation = await storage.getWorkspaceInvitationByToken(token);
+      
+      if (!invitation) {
+        return res.status(404).json({ message: "Invitation not found" });
+      }
+
+      if (invitation.status !== "pending") {
+        return res.status(400).json({ message: "This invitation has already been used" });
+      }
+
+      if (new Date() > new Date(invitation.expiresAt)) {
+        return res.status(400).json({ message: "This invitation has expired" });
+      }
+
+      const workspace = await storage.getWorkspace(invitation.workspaceId);
+      const inviter = await storage.getUser(invitation.inviterId);
+
+      res.json({
+        ...invitation,
+        workspaceName: workspace?.name,
+        inviterName: inviter?.username,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/invitations/:token/accept", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+
+      const { token } = req.params;
+      const invitation = await storage.getWorkspaceInvitationByToken(token);
+      
+      if (!invitation) {
+        return res.status(404).json({ message: "Invitation not found" });
+      }
+
+      if (invitation.status !== "pending") {
+        return res.status(400).json({ message: "This invitation has already been used" });
+      }
+
+      if (new Date() > new Date(invitation.expiresAt)) {
+        return res.status(400).json({ message: "This invitation has expired" });
+      }
+
+      // Check if user's email matches the invitation
+      if (req.user!.email !== invitation.email) {
+        return res.status(403).json({ 
+          message: "This invitation was sent to a different email address" 
+        });
+      }
+
+      // Add user to workspace
+      await storage.createWorkspaceMember({
+        workspaceId: invitation.workspaceId,
+        userId: req.user!.id,
+        role: invitation.role,
+        status: "active",
+      });
+
+      // Update invitation status
+      await storage.updateWorkspaceInvitation(invitation.id, {
+        status: "accepted",
+        acceptedAt: new Date(),
+        invitedUserId: req.user!.id,
+      });
+
+      res.json({ message: "Invitation accepted successfully" });
     } catch (error) {
       next(error);
     }

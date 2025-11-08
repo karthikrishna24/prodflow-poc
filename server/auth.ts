@@ -58,8 +58,17 @@ export function setupAuth(app: Express) {
 
   passport.serializeUser((user, done) => done(null, user.id));
   passport.deserializeUser(async (id: string, done) => {
-    const user = await storage.getUser(id);
-    done(null, user);
+    try {
+      const user = await storage.getUser(id);
+      if (!user) {
+        // User no longer exists (e.g., after database migration) - clear the session
+        return done(null, null);
+      }
+      done(null, user);
+    } catch (error) {
+      // Handle any errors gracefully
+      done(null, null);
+    }
   });
 
   app.post("/api/register", async (req, res, next) => {
@@ -70,9 +79,61 @@ export function setupAuth(app: Express) {
       }
 
       const user = await storage.createUser({
-        ...req.body,
+        username: req.body.username,
+        email: req.body.email,
         password: await hashPassword(req.body.password),
       });
+
+      // Auto-create workspace, team, and environments for new user
+      const workspaceType = req.body.workspaceType || "individual";
+      const workspaceName = workspaceType === "organization" && req.body.workspaceName
+        ? req.body.workspaceName
+        : `${user.username}'s Workspace`;
+
+      const workspace = await storage.createWorkspace({
+        name: workspaceName,
+        type: workspaceType,
+        slug: `${user.username}-${randomBytes(4).toString("hex")}`,
+        createdBy: user.id,
+      });
+
+      // Add user as workspace admin
+      const workspaceMember = await storage.createWorkspaceMember({
+        workspaceId: workspace.id,
+        userId: user.id,
+        role: "admin",
+        status: "active",
+      });
+
+      // Create default team
+      const team = await storage.createTeam({
+        workspaceId: workspace.id,
+        name: "Main Team",
+        description: "Default team for releases",
+      });
+
+      // Add user to team
+      await storage.createTeamMember({
+        teamId: team.id,
+        workspaceMemberId: workspaceMember.id,
+        role: "admin",
+      });
+
+      // Create default environments (Staging, UAT, Production)
+      const defaultEnvs = [
+        { name: "Staging", sortOrder: "1" },
+        { name: "UAT", sortOrder: "2" },
+        { name: "Production", sortOrder: "3" },
+      ];
+      
+      for (const env of defaultEnvs) {
+        await storage.createEnvironment({
+          teamId: team.id,
+          name: env.name,
+          sortOrder: env.sortOrder,
+          isDefault: true,
+        });
+      }
 
       req.login(user, (err) => {
         if (err) return next(err);

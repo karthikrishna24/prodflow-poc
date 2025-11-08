@@ -42,36 +42,28 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
   const environments = useMemo(() => {
     if (!release?.stages) return [];
     
-    const envOrder = ["staging", "uat", "prod"] as const;
-    return envOrder.map((env) => {
-      const stage = release.stages?.find((s: any) => s.env === env);
-      if (!stage) {
-        return {
-          id: env,
-          name: `${env.charAt(0).toUpperCase() + env.slice(1)} Environment`,
-          env,
-          tasksCompleted: 0,
-          tasksTotal: 0,
-          lastUpdate: "Never",
-          status: "not_started" as const,
-        };
-      }
-      
+    // Get all stages with their environment data
+    return release.stages.map((stage: any) => {
+      const environment = stage.environment || { id: stage.environmentId, name: "Unknown" };
       const tasks = stage.tasks || [];
       const tasksCompleted = tasks.filter((t: any) => t.status === "done").length;
       const tasksTotal = tasks.length;
       
       return {
         id: stage.id,
-        name: `${env.charAt(0).toUpperCase() + env.slice(1)} Environment`,
-        env,
+        environmentId: stage.environmentId,
+        name: environment.name,
         tasksCompleted,
         tasksTotal,
         lastUpdate: stage.lastUpdate 
           ? formatDistanceToNow(new Date(stage.lastUpdate), { addSuffix: true })
           : "Never",
-        status: stage.status,
+        status: stage.status || "not_started",
+        blockers: stage.blockers || [],
       };
+    }).sort((a, b) => {
+      // Sort by environment sortOrder if available, otherwise by name
+      return a.name.localeCompare(b.name);
     });
   }, [release]);
 
@@ -89,13 +81,14 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
         position: { x: startX + (index * nodeSpacing), y: centerY },
         data: {
           id: env.id,
+          environmentId: env.environmentId,
           name: env.name,
-          env: env.env,
           status: env.status,
           tasksCompleted: env.tasksCompleted,
           tasksTotal: env.tasksTotal,
           lastUpdate: env.lastUpdate,
-          onClick: () => onEnvironmentClick?.(env.env),
+          blockers: env.blockers,
+          onClick: () => onEnvironmentClick?.(env.environmentId),
         },
       };
     });

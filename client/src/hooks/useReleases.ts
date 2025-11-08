@@ -16,13 +16,14 @@ export interface Release {
 export interface CreateReleaseData {
   name: string;
   version?: string;
-  team?: string;
+  teamId?: string; // Changed from 'team' to 'teamId' to match API
   createdBy?: string;
 }
 
-export function useReleases(team?: string) {
+export function useReleases(teamId?: string) {
   return useQuery<Release[]>({
-    queryKey: ["/api/releases", team ? { team } : undefined],
+    queryKey: ["/api/releases", teamId ? { teamId } : undefined],
+    // The default queryFn from queryClient will handle the API_BASE_URL and query params
   });
 }
 
@@ -41,8 +42,12 @@ export function useCreateRelease() {
       const res = await apiRequest("POST", "/api/releases", data);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/releases"] });
+      // Also invalidate with teamId if provided
+      if (variables.teamId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/releases", { teamId: variables.teamId }] });
+      }
     },
   });
 }
@@ -58,6 +63,20 @@ export function useUpdateRelease() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/releases"] });
       queryClient.invalidateQueries({ queryKey: [`/api/releases/${variables.id}`] });
+    },
+  });
+}
+
+export function useDeleteRelease() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (releaseId: string) => {
+      const res = await apiRequest("DELETE", `/api/releases/${releaseId}`);
+      return res;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/releases"] });
     },
   });
 }

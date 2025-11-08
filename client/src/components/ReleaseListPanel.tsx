@@ -1,26 +1,42 @@
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+import { Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import ReleaseCard from "./ReleaseCard";
 import CreateReleaseDialog from "./CreateReleaseDialog";
-import { useReleases, useCreateRelease } from "@/hooks/useReleases";
+import { useReleases, useCreateRelease, useDeleteRelease } from "@/hooks/useReleases";
 import { useAuth } from "@/hooks/use-auth";
 import { formatDistanceToNow } from "date-fns";
+import { useToast } from "@/hooks/use-toast";
 
 interface ReleaseListPanelProps {
+  projectId: string;
   onReleaseClick?: (releaseId: string) => void;
 }
 
 type FilterStatus = "all" | "ongoing" | "finished" | "failed";
 
-export default function ReleaseListPanel({ onReleaseClick }: ReleaseListPanelProps) {
+export default function ReleaseListPanel({ projectId, onReleaseClick }: ReleaseListPanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
-  const { data: releases = [], isLoading } = useReleases();
+  const { data: releases = [], isLoading } = useReleases(projectId);
   const createRelease = useCreateRelease();
+  const deleteRelease = useDeleteRelease();
   const { user } = useAuth();
+  const { toast } = useToast();
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [releaseToDelete, setReleaseToDelete] = useState<string | null>(null);
   
   const filteredReleases = releases.filter((release: any) => {
     const matchesSearch = 
@@ -54,9 +70,34 @@ export default function ReleaseListPanel({ onReleaseClick }: ReleaseListPanelPro
     await createRelease.mutateAsync({
       name: data.name,
       version: data.version,
-      team: data.team,
+      teamId: projectId, // Use the projectId from props, changed to teamId
       createdBy: user?.username || "system",
     });
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent, releaseId: string) => {
+    e.stopPropagation();
+    setReleaseToDelete(releaseId);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!releaseToDelete) return;
+    try {
+      await deleteRelease.mutateAsync(releaseToDelete);
+      toast({
+        title: "Voyage deleted",
+        description: "The voyage has been successfully deleted.",
+      });
+      setDeleteDialogOpen(false);
+      setReleaseToDelete(null);
+    } catch (error: any) {
+      toast({
+        title: "Failed to delete voyage",
+        description: error.message || "Please try again",
+        variant: "destructive",
+      });
+    }
   };
 
   const filterButtons: { label: string; value: FilterStatus }[] = [
@@ -109,18 +150,49 @@ export default function ReleaseListPanel({ onReleaseClick }: ReleaseListPanelPro
         ) : (
           <div className="space-y-3">
             {filteredReleases.map((release) => (
-              <ReleaseCard
-                key={release.id}
-                id={release.id}
-                name={release.name}
-                version={release.version || "No version"}
-                status={release.status || "not_started"}
-                progress={release.progress || 0}
-                updatedAt={release.createdAt ? formatDistanceToNow(new Date(release.createdAt), { addSuffix: true }) : "Unknown"}
-                onClick={() => onReleaseClick?.(release.id)}
-              />
+              <div key={release.id} className="relative group">
+                <ReleaseCard
+                  id={release.id}
+                  name={release.name}
+                  version={release.version || "No version"}
+                  status={release.status || "not_started"}
+                  progress={release.progress || 0}
+                  updatedAt={release.createdAt ? formatDistanceToNow(new Date(release.createdAt), { addSuffix: true }) : "Unknown"}
+                  onClick={() => onReleaseClick?.(release.id)}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6"
+                  onClick={(e) => handleDeleteClick(e, release.id)}
+                  data-testid={`delete-release-${release.id}`}
+                >
+                  <Trash2 className="h-3 w-3 text-destructive" />
+                </Button>
+              </div>
             ))}
           </div>
+          <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Voyage?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action cannot be undone. This will permanently delete the voyage
+                  and all its stages, tasks, and associated data.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDeleteConfirm}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  disabled={deleteRelease.isPending}
+                >
+                  {deleteRelease.isPending ? "Deleting..." : "Delete"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         )}
       </div>
     </div>

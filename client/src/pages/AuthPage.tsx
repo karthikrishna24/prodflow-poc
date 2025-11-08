@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -6,18 +6,26 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Anchor, Ship, Package } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Anchor, Ship, Package, User, Users } from "lucide-react";
 
 export default function AuthPage() {
   const { user, loginMutation, registerMutation } = useAuth();
   const [, setLocation] = useLocation();
   const [loginData, setLoginData] = useState({ username: "", password: "" });
-  const [registerData, setRegisterData] = useState({ username: "", password: "" });
+  const [registerData, setRegisterData] = useState({ 
+    username: "", 
+    password: "", 
+    email: "",
+    workspaceType: "individual" as "individual" | "organization",
+    workspaceName: ""
+  });
 
-  if (user) {
-    setLocation("/");
-    return null;
-  }
+  useEffect(() => {
+    if (user) {
+      setLocation("/");
+    }
+  }, [user, setLocation]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,11 +43,11 @@ export default function AuthPage() {
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
             <div className="flex items-center justify-center gap-2 mb-4">
-              <Anchor className="h-10 w-10 text-primary" />
-              <h1 className="text-4xl font-bold">Shipyard</h1>
+              <Anchor className="w-10 h-10 text-primary" />
+              <h1 className="text-4xl font-bold">DockVoyage</h1>
             </div>
             <p className="text-muted-foreground">
-              Your release dockmaster for smooth deployments
+              See your releases clearly.
             </p>
           </div>
 
@@ -54,7 +62,7 @@ export default function AuthPage() {
                 <CardHeader>
                   <CardTitle>Welcome aboard!</CardTitle>
                   <CardDescription>
-                    Sign in to manage your releases with CargoCat
+                    Sign in to manage your releases
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -119,6 +127,18 @@ export default function AuthPage() {
                       />
                     </div>
                     <div className="space-y-2">
+                      <Label htmlFor="register-email">Email</Label>
+                      <Input
+                        id="register-email"
+                        data-testid="input-register-email"
+                        type="email"
+                        placeholder="your@email.com"
+                        value={registerData.email}
+                        onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
                       <Label htmlFor="register-password">Password</Label>
                       <Input
                         id="register-password"
@@ -130,6 +150,64 @@ export default function AuthPage() {
                         required
                       />
                     </div>
+                    <div className="space-y-3">
+                      <div>
+                        <Label className="text-base font-semibold">Choose Your Workspace Type</Label>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          This will create your workspace. You can invite team members later if you choose Organization.
+                        </p>
+                      </div>
+                      <RadioGroup
+                        value={registerData.workspaceType}
+                        onValueChange={(value: "individual" | "organization") => 
+                          setRegisterData({ ...registerData, workspaceType: value })
+                        }
+                        data-testid="radio-workspace-type"
+                      >
+                        <label htmlFor="individual" className={`flex items-center space-x-2 border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                          registerData.workspaceType === "individual" 
+                            ? "border-primary bg-primary/5 hover:bg-primary/10" 
+                            : "border-border hover:bg-accent"
+                        }`}>
+                          <RadioGroupItem value="individual" id="individual" data-testid="radio-individual" />
+                          <div className="flex items-center gap-3 cursor-pointer flex-1">
+                            <User className="h-5 w-5 text-primary" />
+                            <div>
+                              <div className="font-semibold">Individual</div>
+                              <div className="text-xs text-muted-foreground">Personal workspace for your own projects</div>
+                            </div>
+                          </div>
+                        </label>
+                        <label htmlFor="organization" className={`flex items-center space-x-2 border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                          registerData.workspaceType === "organization" 
+                            ? "border-primary bg-primary/5 hover:bg-primary/10" 
+                            : "border-border hover:bg-accent"
+                        }`}>
+                          <RadioGroupItem value="organization" id="organization" data-testid="radio-organization" />
+                          <div className="flex items-center gap-3 cursor-pointer flex-1">
+                            <Users className="h-5 w-5 text-primary" />
+                            <div>
+                              <div className="font-semibold">Organization</div>
+                              <div className="text-xs text-muted-foreground">Team workspace - invite members and collaborate</div>
+                            </div>
+                          </div>
+                        </label>
+                      </RadioGroup>
+                    </div>
+                    {registerData.workspaceType === "organization" && (
+                      <div className="space-y-2">
+                        <Label htmlFor="workspace-name">Organization Name</Label>
+                        <Input
+                          id="workspace-name"
+                          data-testid="input-workspace-name"
+                          type="text"
+                          placeholder="e.g., Acme Corp"
+                          value={registerData.workspaceName}
+                          onChange={(e) => setRegisterData({ ...registerData, workspaceName: e.target.value })}
+                          required={registerData.workspaceType === "organization"}
+                        />
+                      </div>
+                    )}
                     <Button
                       type="submit"
                       className="w-full"
@@ -154,10 +232,10 @@ export default function AuthPage() {
             <Package className="h-24 w-24 text-primary/50" />
           </div>
           <h2 className="text-4xl font-bold mb-4">
-            Meet CargoCat
+            DockVoyage
           </h2>
           <p className="text-xl text-muted-foreground mb-6">
-            Your trusted dockmaster for managing releases across environments
+            Your trusted platform for managing releases across environments
           </p>
           <div className="space-y-3 text-left">
             <div className="flex items-start gap-3">

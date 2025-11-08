@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Ship } from "lucide-react";
 
 interface CreateReleaseDialogProps {
-  onCreateRelease?: (data: { name: string; version: string; team: string }) => void;
+  onCreateRelease?: (data: { name: string; version: string; team: string }) => void; // team is kept for backward compat but will be mapped to teamId
 }
 
 export default function CreateReleaseDialog({ onCreateRelease }: CreateReleaseDialogProps) {
@@ -22,7 +22,7 @@ export default function CreateReleaseDialog({ onCreateRelease }: CreateReleaseDi
   const [formData, setFormData] = useState({
     name: "",
     version: "",
-    team: "",
+    team: "", // This will be set by the parent
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -69,17 +69,6 @@ export default function CreateReleaseDialog({ onCreateRelease }: CreateReleaseDi
                 onChange={(e) => setFormData({ ...formData, version: e.target.value })}
                 required
                 data-testid="input-version"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="team">Crew</Label>
-              <Input
-                id="team"
-                placeholder="e.g., Platform Team"
-                value={formData.team}
-                onChange={(e) => setFormData({ ...formData, team: e.target.value })}
-                required
-                data-testid="input-team"
               />
             </div>
           </div>
