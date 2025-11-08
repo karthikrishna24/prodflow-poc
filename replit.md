@@ -16,6 +16,16 @@ DockVoyage is a production-ready multi-tenant release management platform with n
 
 ## Recent Changes (November 8, 2025)
 
+### User-Controlled Environment Management ✅
+- **Empty canvas by default**: Removed auto-provisioning of default environments - users now start with a blank canvas
+- **Add Environment dialog**: Users can create custom environments with name and optional description
+- **Environment descriptions**: Description field added to database schema and persisted correctly
+- **Delete environments**: Trash icon button on environment nodes with confirmation dialog
+- **Cascade deletion**: Deleting an environment removes it from all releases via database foreign keys
+- **API endpoints for environment CRUD**:
+  - POST `/api/teams/:teamId/environments` - Create environment with name and description
+  - DELETE `/api/environments/:id` - Delete environment (admin/owner only, cascade removes from all releases)
+
 ### Interactive Canvas for Release Management ✅
 - **Draggable environment nodes**: Users can drag and reposition environment boxes on the canvas
 - **Visual flow connections**: Connect environments with edges to show deployment flow paths
@@ -24,7 +34,7 @@ DockVoyage is a production-ready multi-tenant release management platform with n
 - **Persistent diagram storage**: Node positions and edge connections stored in database (diagrams table)
 - **React Flow integration**: Built using React Flow library for professional node-based editing
 - **API endpoints**: New routes for creating environments and saving diagram layouts
-  - POST `/api/teams/:teamId/environments` - Create new environment nodes
+  - POST `/api/teams/:teamId/environments` - Create new environment nodes (now accepts description)
   - POST `/api/releases/:releaseId/stages` - Create stages when environments are added
   - PUT `/api/releases/:releaseId/diagram` - Save/update canvas layout
 
@@ -48,9 +58,9 @@ DockVoyage is a production-ready multi-tenant release management platform with n
 
 ### Multi-Tenant Architecture Migration ✅
 - **Complete database redesign** with workspaces, teams, members, environments, and flows
-- **Auto-provisioning**: New users automatically get workspace + team + 3 default environments
+- **Auto-provisioning**: New users automatically get workspace + team (environment provisioning removed)
 - **RBAC implementation**: Workspace admins, team admins, and member roles
-- **Custom environments**: Teams can create their own environments (not hardcoded to staging/UAT/prod)
+- **Custom environments**: Teams can create their own environments with names and descriptions
 - **Security hardening**: ALL endpoints now enforce authentication + team ownership validation
 - **Data isolation**: Users can only access releases within their workspace's teams
 
