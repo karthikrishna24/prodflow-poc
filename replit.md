@@ -1,16 +1,28 @@
-# Shipyard - Release Management Dashboard
+# DockVoyage - Multi-Tenant Release Management Platform
 
 ## Overview
 
-Shipyard is a production-ready release management dashboard featuring the CargoCat mascot as your trusted dockmaster. The application provides user authentication, release tracking across environments (staging, UAT, production), and status filtering with a complete nautical theme throughout the UI. Future features will incorporate CargoCat in chatbot and email notifications.
+DockVoyage is a production-ready multi-tenant release management platform featuring the CargoCat mascot (🐱) as your trusted dockmaster. The application provides workspace/team-based organization, user authentication, release tracking with custom environments, and complete RBAC (Role-Based Access Control). Built for both individual users and organizations with secure data isolation.
 
-**Branding**: Shipyard with CargoCat dockmaster mascot - complete nautical/maritime theme with ocean-inspired colors and terminology.
+**Domain**: dockvoyage.com  
+**Tagline**: "See your releases clearly"  
+**Mascot**: 🐱 CargoCat - your trusted dockmaster
 
 ## User Preferences
 
 - Preferred communication style: Simple, everyday language
-- Design preference: Nautical theme with CargoCat mascot, no emojis (use icons instead)
-- Default environments: staging, UAT, production (auto-created with releases)
+- Design preference: Nautical theme with CargoCat mascot, no emojis in code (use icons)
+- Architecture: Multi-tenant with workspaces → teams → releases → environments → stages
+
+## Recent Changes (November 8, 2025)
+
+### Multi-Tenant Architecture Migration ✅
+- **Complete database redesign** with workspaces, teams, members, environments, and flows
+- **Auto-provisioning**: New users automatically get workspace + team + 3 default environments
+- **RBAC implementation**: Workspace admins, team admins, and member roles
+- **Custom environments**: Teams can create their own environments (not hardcoded to staging/UAT/prod)
+- **Security hardening**: ALL endpoints now enforce authentication + team ownership validation
+- **Data isolation**: Users can only access releases within their workspace's teams
 
 ## Recent Changes (November 7, 2025)
 
@@ -106,20 +118,32 @@ Shipyard is a production-ready release management dashboard featuring the CargoC
 ### Data Storage
 
 **Database Schema**
-- **users**: Authentication and user management (id, username, password)
-- **releases**: Top-level release entities with name, version, team, and change window
-- **stages**: Environment-specific deployment stages (staging, UAT, prod) linked to releases
-- **tasks**: Actionable items within stages with status, owner, and evidence tracking
-- **blockers**: Issues preventing stage progression with severity levels (P1, P2, P3)
-- **diagrams**: Visual layout persistence for flow canvas (planned)
-- **diagramNodes**: Node positions and metadata for diagram persistence (planned)
-- **activityLog**: Audit trail of changes and approvals (planned)
+
+**Multi-Tenant Core:**
+- **workspaces**: Top-level tenant containers (id, name, type: individual/organization, slug)
+- **workspaceMembers**: User→workspace membership with roles (admin/member)
+- **teams**: Groups within workspaces that own releases (id, name, description)
+- **teamMembers**: User→team membership with roles (admin/member)
+- **invitations**: Email invites for team collaboration (pending implementation)
+
+**Release Management:**
+- **releases**: Voyages within teams (id, teamId, name, version, changeWindow)
+- **environments**: Custom deployment targets per team (id, teamId, name, sortOrder)
+- **stages**: Release progress through environments (releaseId, environmentId, status, approver)
+- **flows**: Task groupings within environments (environmentId, name, sortOrder)
+- **tasks**: Actionable items within stages (stageId, flowId, title, owner, status, evidence)
+- **blockers**: Issues preventing stage progression (stageId, severity: P1/P2/P3, active)
+- **activityLog**: Audit trail of all changes (workspaceId, releaseId, stageId, actor, action)
 
 **Enums for Type Safety**
-- Environment types: staging, uat, prod
+- Workspace types: individual, organization
+- Workspace member roles: admin, member
+- Workspace member status: active, inactive
+- Team member roles: admin, member
 - Stage statuses: not_started, in_progress, blocked, done
 - Task statuses: todo, doing, done, na
 - Blocker severity: P1, P2, P3
+- Invitation status: pending, accepted, expired
 
 **Session Storage**
 - PostgreSQL-backed session store using connect-pg-simple
