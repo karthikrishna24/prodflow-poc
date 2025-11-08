@@ -101,6 +101,7 @@ export default function StageDetailPanel({ stageId, releaseId, isOpen, onClose }
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDescription, setNewTaskDescription] = useState("");
   const [newTaskOwner, setNewTaskOwner] = useState("");
+  const [newTaskEvidence, setNewTaskEvidence] = useState("");
   const [newBlockerReason, setNewBlockerReason] = useState("");
   const [newBlockerSeverity, setNewBlockerSeverity] = useState<"P1" | "P2" | "P3">("P2");
   const [newBlockerOwner, setNewBlockerOwner] = useState("");
@@ -113,7 +114,7 @@ export default function StageDetailPanel({ stageId, releaseId, isOpen, onClose }
 
   // Add task mutation
   const addTask = useMutation({
-    mutationFn: async (data: { title: string; description?: string; owner?: string }) => {
+    mutationFn: async (data: { title: string; description?: string; owner?: string; evidence?: string }) => {
       if (!stageId) throw new Error("No stage selected");
       const response = await apiRequest('POST', `/api/stages/${stageId}/tasks`, {
         ...data,
@@ -128,6 +129,7 @@ export default function StageDetailPanel({ stageId, releaseId, isOpen, onClose }
       setNewTaskTitle("");
       setNewTaskDescription("");
       setNewTaskOwner("");
+      setNewTaskEvidence("");
       toast({
         title: "Task added",
         description: "Task has been added successfully.",
@@ -220,6 +222,7 @@ export default function StageDetailPanel({ stageId, releaseId, isOpen, onClose }
         title: newTaskTitle.trim(),
         description: newTaskDescription.trim() || undefined,
         owner: newTaskOwner.trim() || undefined,
+        evidence: newTaskEvidence.trim() || undefined,
       });
     }
   };
@@ -448,6 +451,20 @@ export default function StageDetailPanel({ stageId, releaseId, isOpen, onClose }
                 placeholder="e.g., john@example.com"
                 data-testid="input-task-owner"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="task-evidence">Evidence Link</Label>
+              <Input
+                id="task-evidence"
+                type="url"
+                value={newTaskEvidence}
+                onChange={(e) => setNewTaskEvidence(e.target.value)}
+                placeholder="https://github.com/org/repo/pull/123"
+                data-testid="input-task-evidence"
+              />
+              <p className="text-xs text-muted-foreground">
+                Optional: Link to CI run, PR, Terraform plan, runbook, etc.
+              </p>
             </div>
           </div>
           <DialogFooter>
