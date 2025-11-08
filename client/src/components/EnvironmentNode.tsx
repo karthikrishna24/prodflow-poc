@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 interface EnvironmentNodeProps {
   id: string;
   name: string;
-  env: "staging" | "uat" | "prod";
+  env?: string; // Now optional and accepts any string
   status: "not_started" | "in_progress" | "blocked" | "done";
   tasksCompleted: number;
   tasksTotal: number;
@@ -14,11 +14,15 @@ interface EnvironmentNodeProps {
   onClick?: () => void;
 }
 
-const envConfig = {
+const envConfig: Record<string, { label: string; className: string }> = {
   staging: { label: "Staging", className: "bg-blue-500/10 text-blue-600 dark:text-blue-400" },
   uat: { label: "UAT", className: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
   prod: { label: "Production", className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
+  production: { label: "Production", className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
 };
+
+// Default environment config for custom environments
+const defaultEnvConfig = { label: "Custom", className: "bg-primary/10 text-primary" };
 
 const statusConfig = {
   not_started: { dot: "bg-muted-foreground", label: "Not Started" },
@@ -37,7 +41,9 @@ export default function EnvironmentNode({
   lastUpdate,
   onClick,
 }: EnvironmentNodeProps) {
-  const envInfo = envConfig[env];
+  // Use the env config if it exists, otherwise use default config
+  const envKey = env?.toLowerCase() || "";
+  const envInfo = envConfig[envKey] || defaultEnvConfig;
   const statusInfo = statusConfig[status];
   const progress = tasksTotal > 0 ? (tasksCompleted / tasksTotal) * 100 : 0;
 

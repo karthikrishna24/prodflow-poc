@@ -118,6 +118,7 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
           id: env.id,
           environmentId: env.environmentId,
           name: env.name,
+          env: env.name.toLowerCase(), // Use environment name as env type
           status: env.status,
           tasksCompleted: env.tasksCompleted,
           tasksTotal: env.tasksTotal,
