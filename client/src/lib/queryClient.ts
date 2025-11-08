@@ -62,8 +62,8 @@ export const getQueryFn: <T>(options: {
   async ({ queryKey }) => {
     // queryKey is an array like ["/api/teams"] or ["/api/releases", { teamId: "..." }]
     const path = Array.isArray(queryKey) 
-      ? queryKey[0] as string
-      : queryKey as string;
+      ? String(queryKey[0])
+      : String(queryKey);
     
     const fullUrl = path.startsWith("/")
       ? `${API_BASE_URL}${path}`

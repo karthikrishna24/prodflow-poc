@@ -198,7 +198,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.sendStatus(204);
     } catch (error: any) {
-      // Handle any database errors gracefully
+      // Handle foreign key constraint violations
+      if (error.code === '23503') {
+        return res.status(400).json({ 
+          message: "Cannot delete environment because it's still being used. Please remove it from all releases first." 
+        });
+      }
+      // Handle other database errors gracefully
       if (error.code) {
         return res.status(500).json({ message: "Failed to delete environment. Please try again." });
       }
