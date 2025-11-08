@@ -164,7 +164,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       res.status(201).json(environment);
-    } catch (error) {
+    } catch (error: any) {
+      // Handle duplicate environment name error
+      if (error.code === '23505' && error.constraint === 'environments_team_id_name_unique') {
+        return res.status(400).json({ 
+          message: `An environment with the name "${req.body.name}" already exists in this team.` 
+        });
+      }
       next(error);
     }
   });
@@ -191,7 +197,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.deleteEnvironment(id);
       
       res.sendStatus(204);
-    } catch (error) {
+    } catch (error: any) {
+      // Handle any database errors gracefully
+      if (error.code) {
+        return res.status(500).json({ message: "Failed to delete environment. Please try again." });
+      }
       next(error);
     }
   });

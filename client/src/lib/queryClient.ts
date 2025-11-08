@@ -21,8 +21,15 @@ export const API_BASE_URL = getApiBaseUrl();
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    const text = await res.text();
+    try {
+      // Try to parse as JSON to extract user-friendly message
+      const json = JSON.parse(text);
+      throw new Error(json.message || text || res.statusText);
+    } catch (parseError) {
+      // If not JSON, use the text or status
+      throw new Error(text || res.statusText);
+    }
   }
 }
 
