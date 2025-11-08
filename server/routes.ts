@@ -455,8 +455,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const tasks = await storage.getTasksByStage(stage.id);
       const blockers = await storage.getBlockersByStage(stage.id);
+      const environment = await storage.getEnvironment(stage.environmentId);
       
-      res.json({ ...stage, tasks, blockers });
+      res.json({ ...stage, tasks, blockers, environment });
     } catch (error) {
       next(error);
     }

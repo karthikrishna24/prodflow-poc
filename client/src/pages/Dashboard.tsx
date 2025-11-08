@@ -1,6 +1,7 @@
 import { useState } from "react";
 import ReleaseListPanel from "@/components/ReleaseListPanel";
 import EnvironmentFlowCanvas from "@/components/EnvironmentFlowCanvas";
+import StageDetailPanel from "@/components/StageDetailPanel";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useLocation, useRoute } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
@@ -12,6 +13,7 @@ export default function Dashboard() {
   const [, params] = useRoute<{ projectId: string }>("/project/:projectId");
   const [, setLocation] = useLocation();
   const [selectedRelease, setSelectedRelease] = useState<string | null>(null);
+  const [selectedStage, setSelectedStage] = useState<string | null>(null);
   const { user, logoutMutation } = useAuth();
   const { data: teams = [] } = useTeams();
   const projectId = params?.projectId;
@@ -19,12 +21,15 @@ export default function Dashboard() {
 
   const handleReleaseClick = (releaseId: string) => {
     setSelectedRelease(releaseId);
+    setSelectedStage(null); // Close stage panel when switching releases
   };
 
-  const handleEnvironmentClick = (envId: string) => {
-    if (selectedRelease) {
-      setLocation(`/environment/${envId}?releaseId=${selectedRelease}`);
-    }
+  const handleEnvironmentClick = (stageId: string) => {
+    setSelectedStage(stageId);
+  };
+
+  const handleCloseStagePanel = () => {
+    setSelectedStage(null);
   };
 
   const handleLogout = () => {
@@ -99,6 +104,14 @@ export default function Dashboard() {
             </div>
           )}
         </div>
+        
+        {/* Stage Detail Panel */}
+        <StageDetailPanel
+          stageId={selectedStage}
+          releaseId={selectedRelease}
+          isOpen={!!selectedStage}
+          onClose={handleCloseStagePanel}
+        />
       </div>
     </div>
   );
