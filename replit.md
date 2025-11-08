@@ -16,6 +16,18 @@ DockVoyage is a production-ready multi-tenant release management platform with n
 
 ## Recent Changes (November 8, 2025)
 
+### Interactive Canvas for Release Management ✅
+- **Draggable environment nodes**: Users can drag and reposition environment boxes on the canvas
+- **Visual flow connections**: Connect environments with edges to show deployment flow paths
+- **Auto-save functionality**: Canvas layout automatically saves after 2 seconds of inactivity (debounced)
+- **Add Environment button**: Toolbar allows users to create new environment nodes dynamically
+- **Persistent diagram storage**: Node positions and edge connections stored in database (diagrams table)
+- **React Flow integration**: Built using React Flow library for professional node-based editing
+- **API endpoints**: New routes for creating environments and saving diagram layouts
+  - POST `/api/teams/:teamId/environments` - Create new environment nodes
+  - POST `/api/releases/:releaseId/stages` - Create stages when environments are added
+  - PUT `/api/releases/:releaseId/diagram` - Save/update canvas layout
+
 ### Email Invitation System ✅
 - **Workspace type selection**: Signup flow now asks users to select individual vs organization workspace
 - **Resend integration**: Email service configured for transactional emails with nautical branding
