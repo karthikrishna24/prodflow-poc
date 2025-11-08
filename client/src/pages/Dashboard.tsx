@@ -2,15 +2,20 @@ import { useState } from "react";
 import ReleaseListPanel from "@/components/ReleaseListPanel";
 import EnvironmentFlowCanvas from "@/components/EnvironmentFlowCanvas";
 import ThemeToggle from "@/components/ThemeToggle";
-import { useLocation } from "wouter";
+import { useLocation, useRoute } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { Anchor, LogOut, Users } from "lucide-react";
+import { Anchor, LogOut, Users, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTeams } from "@/hooks/useTeams";
 
 export default function Dashboard() {
+  const [, params] = useRoute<{ projectId: string }>("/project/:projectId");
   const [, setLocation] = useLocation();
   const [selectedRelease, setSelectedRelease] = useState<string | null>(null);
   const { user, logoutMutation } = useAuth();
+  const { data: teams = [] } = useTeams();
+  const projectId = params?.projectId;
+  const currentProject = teams.find(t => t.id === projectId);
 
   const handleReleaseClick = (releaseId: string) => {
     setSelectedRelease(releaseId);
@@ -26,12 +31,30 @@ export default function Dashboard() {
     logoutMutation.mutate();
   };
 
+  if (!projectId) {
+    setLocation("/workspace");
+    return null;
+  }
+
   return (
     <div className="h-screen flex flex-col">
       <header className="h-16 border-b bg-card flex items-center justify-between px-6">
         <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setLocation("/workspace")}
+            title="Back to Workspace"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
           <Anchor className="w-6 h-6 text-primary" />
-          <h1 className="text-xl font-bold">DockVoyage</h1>
+          <div>
+            <h1 className="text-xl font-bold">DockVoyage</h1>
+            {currentProject && (
+              <p className="text-xs text-muted-foreground">{currentProject.name}</p>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-4">
           {user && (
@@ -62,7 +85,7 @@ export default function Dashboard() {
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        <ReleaseListPanel onReleaseClick={handleReleaseClick} />
+        <ReleaseListPanel projectId={projectId} onReleaseClick={handleReleaseClick} />
         <div className="flex-1">
           {selectedRelease ? (
             <EnvironmentFlowCanvas releaseId={selectedRelease} onEnvironmentClick={handleEnvironmentClick} />

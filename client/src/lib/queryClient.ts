@@ -1,5 +1,24 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+// Get API base URL from environment or use default
+const getApiBaseUrl = () => {
+  // Allow override via environment variable (VITE_API_BASE_URL)
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  
+  // In production, use api.dockvoyage.com
+  // In development, use localhost (or current origin)
+  if (import.meta.env.PROD) {
+    return "https://api.dockvoyage.com";
+  }
+  
+  // For local development, use the current origin (localhost)
+  return window.location.origin;
+};
+
+export const API_BASE_URL = getApiBaseUrl();
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -12,7 +31,12 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const res = await fetch(url, {
+  // Ensure URL starts with /, then prepend API base URL
+  const fullUrl = url.startsWith("/") 
+    ? `${API_BASE_URL}${url}`
+    : `${API_BASE_URL}/${url}`;
+  
+  const res = await fetch(fullUrl, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,
@@ -29,7 +53,28 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey.join("/") as string, {
+    // queryKey is an array like ["/api/teams"] or ["/api/releases", { teamId: "..." }]
+    const path = Array.isArray(queryKey) 
+      ? queryKey[0] as string
+      : queryKey as string;
+    
+    const fullUrl = path.startsWith("/")
+      ? `${API_BASE_URL}${path}`
+      : `${API_BASE_URL}/${path}`;
+    
+    // Handle query parameters if present
+    let url = fullUrl;
+    if (Array.isArray(queryKey) && queryKey.length > 1 && typeof queryKey[1] === "object") {
+      const params = new URLSearchParams();
+      Object.entries(queryKey[1] as Record<string, string>).forEach(([key, value]) => {
+        if (value) params.append(key, value);
+      });
+      if (params.toString()) {
+        url = `${fullUrl}?${params.toString()}`;
+      }
+    }
+    
+    const res = await fetch(url, {
       credentials: "include",
     });
 

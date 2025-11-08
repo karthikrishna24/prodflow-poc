@@ -151,7 +151,12 @@ export default function AuthPage() {
                       />
                     </div>
                     <div className="space-y-3">
-                      <Label>What brings you aboard?</Label>
+                      <div>
+                        <Label className="text-base font-semibold">Choose Your Workspace Type</Label>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          This will create your workspace. You can invite team members later if you choose Organization.
+                        </p>
+                      </div>
                       <RadioGroup
                         value={registerData.workspaceType}
                         onValueChange={(value: "individual" | "organization") => 
@@ -159,26 +164,34 @@ export default function AuthPage() {
                         }
                         data-testid="radio-workspace-type"
                       >
-                        <div className="flex items-center space-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent" onClick={() => setRegisterData({ ...registerData, workspaceType: "individual" })}>
+                        <label htmlFor="individual" className={`flex items-center space-x-2 border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                          registerData.workspaceType === "individual" 
+                            ? "border-primary bg-primary/5 hover:bg-primary/10" 
+                            : "border-border hover:bg-accent"
+                        }`}>
                           <RadioGroupItem value="individual" id="individual" data-testid="radio-individual" />
-                          <Label htmlFor="individual" className="flex items-center gap-2 cursor-pointer flex-1">
-                            <User className="h-4 w-4" />
+                          <div className="flex items-center gap-3 cursor-pointer flex-1">
+                            <User className="h-5 w-5 text-primary" />
                             <div>
-                              <div className="font-medium">Individual</div>
-                              <div className="text-xs text-muted-foreground">For personal projects</div>
+                              <div className="font-semibold">Individual</div>
+                              <div className="text-xs text-muted-foreground">Personal workspace for your own projects</div>
                             </div>
-                          </Label>
-                        </div>
-                        <div className="flex items-center space-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent" onClick={() => setRegisterData({ ...registerData, workspaceType: "organization" })}>
+                          </div>
+                        </label>
+                        <label htmlFor="organization" className={`flex items-center space-x-2 border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                          registerData.workspaceType === "organization" 
+                            ? "border-primary bg-primary/5 hover:bg-primary/10" 
+                            : "border-border hover:bg-accent"
+                        }`}>
                           <RadioGroupItem value="organization" id="organization" data-testid="radio-organization" />
-                          <Label htmlFor="organization" className="flex items-center gap-2 cursor-pointer flex-1">
-                            <Users className="h-4 w-4" />
+                          <div className="flex items-center gap-3 cursor-pointer flex-1">
+                            <Users className="h-5 w-5 text-primary" />
                             <div>
-                              <div className="font-medium">Organization</div>
-                              <div className="text-xs text-muted-foreground">For teams and collaboration</div>
+                              <div className="font-semibold">Organization</div>
+                              <div className="text-xs text-muted-foreground">Team workspace - invite members and collaborate</div>
                             </div>
-                          </Label>
-                        </div>
+                          </div>
+                        </label>
                       </RadioGroup>
                     </div>
                     {registerData.workspaceType === "organization" && (

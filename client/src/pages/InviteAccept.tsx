@@ -14,24 +14,15 @@ export default function InviteAccept() {
   const token = params?.token;
 
   const { data: invitation, isLoading, error } = useQuery({
-    queryKey: ["/api/invitations", token],
-    queryFn: () => fetch(`/api/invitations/${token}`).then(res => {
-      if (!res.ok) throw new Error("Invitation not found");
-      return res.json();
-    }),
+    queryKey: token ? [`/api/invitations/${token}`] : ["skip"],
     enabled: !!token,
     retry: false,
   });
 
   const acceptMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch(`/api/invitations/${token}/accept`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to accept invitation");
-      }
+      if (!token) throw new Error("No invitation token");
+      const response = await apiRequest("POST", `/api/invitations/${token}/accept`);
       return response.json();
     },
     onSuccess: () => {

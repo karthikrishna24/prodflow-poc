@@ -35,6 +35,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Teams (Projects)
+  app.get("/api/teams", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const workspaces = await storage.getWorkspacesByUser(req.user!.id);
+      if (workspaces.length === 0) {
+        return res.json([]);
+      }
+      
+      const teams = await storage.getTeamsByWorkspace(workspaces[0].id);
+      res.json(teams);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/teams", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const workspaces = await storage.getWorkspacesByUser(req.user!.id);
+      if (workspaces.length === 0) {
+        return res.status(400).json({ message: "No workspace found" });
+      }
+      
+      const { name, description } = req.body;
+      if (!name) {
+        return res.status(400).json({ message: "Team name is required" });
+      }
+      
+      const team = await storage.createTeam({
+        workspaceId: workspaces[0].id,
+        name,
+        description: description || null,
+      });
+      
+      // Create default environments for the new team
+      const defaultEnvs = [
+        { name: "Staging", sortOrder: "1" },
+        { name: "UAT", sortOrder: "2" },
+        { name: "Production", sortOrder: "3" },
+      ];
+      
+      for (const env of defaultEnvs) {
+        await storage.createEnvironment({
+          teamId: team.id,
+          name: env.name,
+          sortOrder: env.sortOrder,
+          isDefault: true,
+        });
+      }
+      
+      res.status(201).json(team);
+    } catch (error: any) {
+      if (error.code === '23505') { // Unique constraint violation
+        return res.status(400).json({ message: "A project with this name already exists" });
+      }
+      next(error);
+    }
+  });
+
+  app.delete("/api/teams/:id", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const workspaces = await storage.getWorkspacesByUser(req.user!.id);
+      if (workspaces.length === 0) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const team = await storage.getTeam(req.params.id);
+      if (!team) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+      
+      // Verify team belongs to user's workspace
+      if (team.workspaceId !== workspaces[0].id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      await storage.deleteTeam(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // Health check endpoint
   app.get("/api/health", async (req, res) => {
     try {

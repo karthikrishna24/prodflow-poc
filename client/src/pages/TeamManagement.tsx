@@ -29,12 +29,7 @@ export default function TeamManagement() {
 
   const sendInviteMutation = useMutation({
     mutationFn: async (data: { email: string; role: string; workspaceId: string }) => {
-      const response = await fetch("/api/invitations", {
-        method: "POST",
-        body: JSON.stringify(data),
-        headers: { "Content-Type": "application/json" },
-      });
-      if (!response.ok) throw new Error("Failed to send invitation");
+      const response = await apiRequest("POST", "/api/invitations", data);
       return response.json();
     },
     onSuccess: () => {
