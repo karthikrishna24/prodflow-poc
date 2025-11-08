@@ -149,6 +149,7 @@ export const environments = pgTable("environments", {
   teamId: varchar("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   description: text("description"),
+  color: text("color"), // User-customizable color (hex, hsl, or CSS color name)
   sortOrder: text("sort_order").notNull(),
   isDefault: boolean("is_default").default(false).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -160,6 +161,7 @@ export const insertEnvironmentSchema = createInsertSchema(environments).pick({
   teamId: true,
   name: true,
   description: true,
+  color: true,
   sortOrder: true,
   isDefault: true,
 });

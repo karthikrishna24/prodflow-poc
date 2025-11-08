@@ -39,13 +39,16 @@ const nodeTypes = {
   environment: ({ data }: any) => (
     <EnvironmentNode
       id={data.id}
+      environmentId={data.environmentId}
       name={data.name}
       env={data.env}
+      color={data.color}
       status={data.status}
       tasksCompleted={data.tasksCompleted}
       tasksTotal={data.tasksTotal}
       lastUpdate={data.lastUpdate}
       onClick={data.onClick}
+      onEdit={data.onEdit}
       onDelete={data.onDelete}
     />
   ),
@@ -62,7 +65,24 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [newEnvName, setNewEnvName] = useState("");
   const [newEnvDescription, setNewEnvDescription] = useState("");
+  const [newEnvColor, setNewEnvColor] = useState("");
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editEnvId, setEditEnvId] = useState<string | null>(null);
+  const [editEnvName, setEditEnvName] = useState("");
+  const [editEnvColor, setEditEnvColor] = useState("");
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Predefined color options for environments
+  const colorOptions = [
+    { name: "Blue", value: "#3B82F6" },
+    { name: "Green", value: "#10B981" },
+    { name: "Yellow", value: "#F59E0B" },
+    { name: "Red", value: "#EF4444" },
+    { name: "Purple", value: "#8B5CF6" },
+    { name: "Pink", value: "#EC4899" },
+    { name: "Indigo", value: "#6366F1" },
+    { name: "Teal", value: "#14B8A6" },
+  ];
 
   // Fetch saved diagram layout
   const { data: diagram } = useQuery<{ layout?: { nodes?: any[]; edges?: any[] } }>({
@@ -74,7 +94,7 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
     if (!release?.stages) return [];
     
     return release.stages.map((stage: any) => {
-      const environment = stage.environment || { id: stage.environmentId, name: "Unknown" };
+      const environment = stage.environment || { id: stage.environmentId, name: "Unknown", color: undefined };
       const tasks = stage.tasks || [];
       const tasksCompleted = tasks.filter((t: any) => t.status === "done").length;
       const tasksTotal = tasks.length;
@@ -83,6 +103,7 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
         id: stage.id,
         environmentId: stage.environmentId,
         name: environment.name,
+        color: environment.color,
         tasksCompleted,
         tasksTotal,
         lastUpdate: stage.lastUpdate 
@@ -93,6 +114,13 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
       };
     }).sort((a, b) => a.name.localeCompare(b.name));
   }, [release]);
+
+  const handleEditEnvironment = (environmentId: string, name: string, color?: string) => {
+    setEditEnvId(environmentId);
+    setEditEnvName(name);
+    setEditEnvColor(color || "");
+    setIsEditDialogOpen(true);
+  };
 
   const initialNodes: Node[] = useMemo(() => {
     if (environments.length === 0) return [];
@@ -122,12 +150,14 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
           environmentId: env.environmentId,
           name: env.name,
           env: env.name.toLowerCase(), // Use environment name as env type
+          color: env.color,
           status: env.status,
           tasksCompleted: env.tasksCompleted,
           tasksTotal: env.tasksTotal,
           lastUpdate: env.lastUpdate,
           blockers: env.blockers,
           onClick: () => onEnvironmentClick?.(env.id),
+          onEdit: () => handleEditEnvironment(env.environmentId, env.name, env.color),
           onDelete: () => handleDeleteEnvironment(env.id),
         },
       };
@@ -135,7 +165,7 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
   }, [environments, diagram, onEnvironmentClick]);
 
   const initialEdges: Edge[] = useMemo(() => {
-    // Check if we have saved edges
+    // Only load saved edges - no automatic connections
     const savedLayout = diagram?.layout;
     if (savedLayout?.edges && savedLayout.edges.length > 0) {
       return savedLayout.edges.map((edge: any) => ({
@@ -147,28 +177,9 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
       }));
     }
 
-    // Default: create linear flow
-    return environments.slice(0, -1).map((env, index) => {
-      const nextEnv = environments[index + 1];
-      const isCompleted = env.tasksCompleted === env.tasksTotal;
-      
-      return {
-        id: `${env.id}-${nextEnv.id}`,
-        source: env.id,
-        target: nextEnv.id,
-        type: "straight",
-        animated: env.status === "done",
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: env.status === "done" ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))",
-        },
-        style: { 
-          stroke: env.status === "done" ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))", 
-          strokeWidth: 3,
-        },
-      };
-    });
-  }, [environments, diagram]);
+    // Return empty array - user creates connections manually
+    return [];
+  }, [diagram]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -279,7 +290,7 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
 
   // Add environment mutation
   const addEnvironment = useMutation({
-    mutationFn: async ({ name, description }: { name: string; description?: string }) => {
+    mutationFn: async ({ name, description, color }: { name: string; description?: string; color?: string }) => {
       if (!releaseId) throw new Error("No release selected");
       if (!release) throw new Error("Release data not loaded");
       
@@ -293,6 +304,7 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
       const envResponse = await apiRequest('POST', `/api/teams/${teamId}/environments`, { 
         name,
         description,
+        color,
         sortOrder: String(environments.length),
       });
       const env = await envResponse.json();
@@ -311,6 +323,7 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
       setIsAddDialogOpen(false);
       setNewEnvName("");
       setNewEnvDescription("");
+      setNewEnvColor("");
       toast({
         title: "Environment added",
         description: "New environment has been added to the canvas.",
@@ -329,7 +342,8 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
     if (newEnvName.trim()) {
       addEnvironment.mutate({ 
         name: newEnvName.trim(), 
-        description: newEnvDescription.trim() || undefined 
+        description: newEnvDescription.trim() || undefined,
+        color: newEnvColor || undefined
       });
     }
   };
@@ -364,6 +378,42 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
   const handleDeleteEnvironment = (environmentId: string) => {
     if (confirm("Are you sure you want to delete this environment? This will remove it from all releases.")) {
       deleteEnvironment.mutate(environmentId);
+    }
+  };
+
+  // Edit environment mutation
+  const editEnvironment = useMutation({
+    mutationFn: async ({ id, name, color }: { id: string; name: string; color?: string }) => {
+      const response = await apiRequest('PATCH', `/api/environments/${id}`, { name, color });
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/releases', releaseId] });
+      setIsEditDialogOpen(false);
+      setEditEnvId(null);
+      setEditEnvName("");
+      setEditEnvColor("");
+      toast({
+        title: "Environment updated",
+        description: "Environment has been updated successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to update environment",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleUpdateEnvironment = () => {
+    if (editEnvId && editEnvName.trim()) {
+      editEnvironment.mutate({ 
+        id: editEnvId,
+        name: editEnvName.trim(),
+        color: editEnvColor || undefined
+      });
     }
   };
 
@@ -465,6 +515,26 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
                 data-testid="input-environment-description"
               />
             </div>
+            <div className="space-y-2">
+              <Label>Color (Optional)</Label>
+              <div className="flex gap-2 flex-wrap">
+                {colorOptions.map((colorOption) => (
+                  <button
+                    key={colorOption.value}
+                    type="button"
+                    onClick={() => setNewEnvColor(colorOption.value)}
+                    className={`w-10 h-10 rounded-md border-2 transition-all ${
+                      newEnvColor === colorOption.value 
+                        ? 'border-primary scale-110' 
+                        : 'border-border hover-elevate'
+                    }`}
+                    style={{ backgroundColor: colorOption.value }}
+                    title={colorOption.name}
+                    data-testid={`color-option-${colorOption.name.toLowerCase()}`}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -473,6 +543,7 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
                 setIsAddDialogOpen(false);
                 setNewEnvName("");
                 setNewEnvDescription("");
+                setNewEnvColor("");
               }}
               data-testid="button-cancel-add-environment"
             >
@@ -484,6 +555,75 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
               data-testid="button-confirm-add-environment"
             >
               {addEnvironment.isPending ? "Adding..." : "Add Environment"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Environment</DialogTitle>
+            <DialogDescription>
+              Update the name and color for this environment.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-env-name">Environment Name</Label>
+              <Input
+                id="edit-env-name"
+                placeholder="e.g., Staging, UAT, Production"
+                value={editEnvName}
+                onChange={(e) => setEditEnvName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && editEnvName.trim() && !e.shiftKey) {
+                    handleUpdateEnvironment();
+                  }
+                }}
+                data-testid="input-edit-environment-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Color (Optional)</Label>
+              <div className="flex gap-2 flex-wrap">
+                {colorOptions.map((colorOption) => (
+                  <button
+                    key={colorOption.value}
+                    type="button"
+                    onClick={() => setEditEnvColor(colorOption.value)}
+                    className={`w-10 h-10 rounded-md border-2 transition-all ${
+                      editEnvColor === colorOption.value 
+                        ? 'border-primary scale-110' 
+                        : 'border-border hover-elevate'
+                    }`}
+                    style={{ backgroundColor: colorOption.value }}
+                    title={colorOption.name}
+                    data-testid={`edit-color-option-${colorOption.name.toLowerCase()}`}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsEditDialogOpen(false);
+                setEditEnvId(null);
+                setEditEnvName("");
+                setEditEnvColor("");
+              }}
+              data-testid="button-cancel-edit-environment"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdateEnvironment}
+              disabled={!editEnvName.trim() || editEnvironment.isPending}
+              data-testid="button-confirm-edit-environment"
+            >
+              {editEnvironment.isPending ? "Updating..." : "Update Environment"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -72,21 +72,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: description || null,
       });
       
-      // Create default environments for the new team
-      const defaultEnvs = [
-        { name: "Staging", sortOrder: "1" },
-        { name: "UAT", sortOrder: "2" },
-        { name: "Production", sortOrder: "3" },
-      ];
-      
-      for (const env of defaultEnvs) {
-        await storage.createEnvironment({
-          teamId: team.id,
-          name: env.name,
-          sortOrder: env.sortOrder,
-          isDefault: true,
-        });
-      }
+      // No default environments - users create their own
       
       res.status(201).json(team);
     } catch (error: any) {
@@ -150,7 +136,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Access denied" });
       }
       
-      const { name, description, sortOrder } = req.body;
+      const { name, description, color, sortOrder } = req.body;
       if (!name) {
         return res.status(400).json({ message: "Environment name is required" });
       }
@@ -159,11 +145,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
         teamId,
         name,
         description: description || undefined,
+        color: color || undefined,
         sortOrder: sortOrder || "0",
         isDefault: false,
       });
       
       res.status(201).json(environment);
+    } catch (error: any) {
+      // Handle duplicate environment name error
+      if (error.code === '23505' && error.constraint === 'environments_team_id_name_unique') {
+        return res.status(400).json({ 
+          message: `An environment with the name "${req.body.name}" already exists in this team.` 
+        });
+      }
+      next(error);
+    }
+  });
+
+  app.patch("/api/environments/:id", async (req, res, next) => {
+    try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const { id } = req.params;
+      
+      // Get the environment to verify team access
+      const environment = await storage.getEnvironment(id);
+      if (!environment) {
+        return res.status(404).json({ message: "Environment not found" });
+      }
+      
+      // Verify user has access to the team
+      const hasAccess = await validateTeamAccess(req.user!.id, environment.teamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const { name, description, color } = req.body;
+      
+      // Update the environment
+      const updatedEnvironment = await storage.updateEnvironment(id, {
+        name: name !== undefined ? name : environment.name,
+        description: description !== undefined ? description : environment.description,
+        color: color !== undefined ? color : environment.color,
+      });
+      
+      res.json(updatedEnvironment);
     } catch (error: any) {
       // Handle duplicate environment name error
       if (error.code === '23505' && error.constraint === 'environments_team_id_name_unique') {

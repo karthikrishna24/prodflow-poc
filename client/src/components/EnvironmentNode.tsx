@@ -3,17 +3,20 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Handle, Position } from "reactflow";
 import { cn } from "@/lib/utils";
-import { Trash2 } from "lucide-react";
+import { Trash2, Pencil } from "lucide-react";
 
 interface EnvironmentNodeProps {
   id: string;
+  environmentId: string;
   name: string;
   env?: string; // Now optional and accepts any string
+  color?: string; // Custom color
   status: "not_started" | "in_progress" | "blocked" | "done";
   tasksCompleted: number;
   tasksTotal: number;
   lastUpdate?: string;
   onClick?: () => void;
+  onEdit?: (environmentId: string, name: string, color?: string) => void;
   onDelete?: (id: string) => void;
 }
 
@@ -36,13 +39,16 @@ const statusConfig = {
 
 export default function EnvironmentNode({
   id,
+  environmentId,
   name,
   env,
+  color,
   status,
   tasksCompleted,
   tasksTotal,
   lastUpdate,
   onClick,
+  onEdit,
   onDelete,
 }: EnvironmentNodeProps) {
   // Use the env config if it exists, otherwise use default config
@@ -61,14 +67,40 @@ export default function EnvironmentNode({
       >
         <div className="p-4 space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <Badge className={cn("text-xs font-medium", envInfo.className)} data-testid={`badge-env-${id}`}>
-              {envInfo.label}
-            </Badge>
-            <div className="flex items-center gap-2">
+            {color ? (
+              <div className="flex items-center gap-2">
+                <div
+                  className="h-4 w-4 rounded-full border-2 border-border"
+                  style={{ backgroundColor: color }}
+                />
+                <Badge className="text-xs font-medium" data-testid={`badge-env-${id}`}>
+                  {name}
+                </Badge>
+              </div>
+            ) : (
+              <Badge className={cn("text-xs font-medium", envInfo.className)} data-testid={`badge-env-${id}`}>
+                {envInfo.label}
+              </Badge>
+            )}
+            <div className="flex items-center gap-1">
               <div className="flex items-center gap-1.5">
                 <div className={cn("h-2 w-2 rounded-full", statusInfo.dot)} />
                 <span className="text-xs text-muted-foreground">{statusInfo.label}</span>
               </div>
+              {onEdit && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit(environmentId, name, color);  // environmentId is the correct environment ID
+                  }}
+                  data-testid={`button-edit-env-${id}`}
+                >
+                  <Pencil className="h-3 w-3" />
+                </Button>
+              )}
               {onDelete && (
                 <Button
                   size="icon"
