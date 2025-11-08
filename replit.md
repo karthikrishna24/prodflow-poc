@@ -2,16 +2,16 @@
 
 ## Overview
 
-DockVoyage is a production-ready multi-tenant release management platform featuring the CargoCat mascot (🐱) as your trusted dockmaster. The application provides workspace/team-based organization, user authentication, release tracking with custom environments, and complete RBAC (Role-Based Access Control). Built for both individual users and organizations with secure data isolation.
+DockVoyage is a production-ready multi-tenant release management platform with nautical theming and anchor branding. The application provides workspace/team-based organization, user authentication, release tracking with custom environments, and complete RBAC (Role-Based Access Control). Built for both individual users and organizations with secure data isolation.
 
 **Domain**: dockvoyage.com  
 **Tagline**: "See your releases clearly"  
-**Mascot**: 🐱 CargoCat - your trusted dockmaster
+**Branding**: Anchor icon with nautical/maritime theme
 
 ## User Preferences
 
 - Preferred communication style: Simple, everyday language
-- Design preference: Nautical theme with CargoCat mascot, no emojis in code (use icons)
+- Design preference: Nautical theme with anchor icon, no emojis in UI (use lucide-react icons)
 - Architecture: Multi-tenant with workspaces → teams → releases → environments → stages
 
 ## Recent Changes (November 8, 2025)
@@ -52,9 +52,9 @@ DockVoyage is a production-ready multi-tenant release management platform featur
 - Updated all UI text to use nautical terminology:
   - Releases → Voyages
   - Environments → Cargo Holds
-  - Agent/Assistant → Dockmaster (CargoCat)
-- Added CargoCat mascot branding to authentication page
-- Removed all emojis in favor of nautical icons
+  - Agent/Assistant → Dockmaster
+- Added anchor icon branding to authentication page
+- Removed all emojis in favor of lucide-react icons
 
 ## System Architecture
 
@@ -78,7 +78,7 @@ DockVoyage is a production-ready multi-tenant release management platform featur
 - Typography system using Inter (UI) and JetBrains Mono (code/IDs) fonts
 
 **Authentication Flow**
-- Split-screen login/signup page with CargoCat mascot introduction
+- Split-screen login/signup page with anchor branding
 - Protected route wrapper requiring authentication
 - Automatic redirect to auth page for unauthenticated users
 - Session persistence across page refreshes
@@ -190,7 +190,7 @@ DockVoyage is a production-ready multi-tenant release management platform featur
 - Google Fonts: Inter and JetBrains Mono via CDN link in HTML
 
 **Planned Integrations** (not yet implemented)
-- Slack/Teams webhooks for CargoCat notifications
+- Slack/Teams webhooks for release notifications
 - GitHub/GitLab API for CI/CD status linking
 - S3-compatible storage for evidence attachments
 - Real-time collaboration via WebSockets
@@ -203,7 +203,7 @@ DockVoyage is a production-ready multi-tenant release management platform featur
 ✅ Release creation and listing
 ✅ Release filtering by status (ongoing/finished/failed)
 ✅ Automatic environment creation (staging, UAT, production)
-✅ Shipyard nautical branding with CargoCat mascot
+✅ Shipyard nautical branding with anchor icon
 ✅ Ocean-inspired color palette
 ✅ Responsive UI with shadcn components
 
@@ -213,8 +213,8 @@ DockVoyage is a production-ready multi-tenant release management platform featur
 - Blocker tracking and resolution
 - Activity log and audit trail
 - Real-time collaboration
-- CargoCat chatbot for release assistance
-- Email notifications with CargoCat branding
+- Chatbot assistant for release help
+- Email notifications with nautical branding
 - Evidence attachment storage
 
 ## Environment Variables
@@ -235,4 +235,4 @@ After authentication, users can:
 - Create new releases (voyages)
 - View all releases in the sidebar
 - Filter releases by status
-- See CargoCat mascot branding throughout
+- Experience nautical-themed interface with anchor branding

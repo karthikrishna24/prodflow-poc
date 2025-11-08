@@ -54,7 +54,7 @@ export default function AuthPage() {
                 <CardHeader>
                   <CardTitle>Welcome aboard!</CardTitle>
                   <CardDescription>
-                    Sign in to manage your releases with CargoCat
+                    Sign in to manage your releases
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -154,10 +154,10 @@ export default function AuthPage() {
             <Package className="h-24 w-24 text-primary/50" />
           </div>
           <h2 className="text-4xl font-bold mb-4">
-            Meet CargoCat
+            DockVoyage
           </h2>
           <p className="text-xl text-muted-foreground mb-6">
-            Your trusted dockmaster for managing releases across environments
+            Your trusted platform for managing releases across environments
           </p>
           <div className="space-y-3 text-left">
             <div className="flex items-start gap-3">
