@@ -74,6 +74,52 @@ export function setupAuth(app: Express) {
         password: await hashPassword(req.body.password),
       });
 
+      // Auto-create workspace, team, and environments for new user
+      const workspace = await storage.createWorkspace({
+        name: `${user.username}'s Workspace`,
+        type: "individual",
+        slug: `${user.username}-${randomBytes(4).toString("hex")}`,
+        createdBy: user.id,
+      });
+
+      // Add user as workspace admin
+      const workspaceMember = await storage.createWorkspaceMember({
+        workspaceId: workspace.id,
+        userId: user.id,
+        role: "admin",
+        status: "active",
+      });
+
+      // Create default team
+      const team = await storage.createTeam({
+        workspaceId: workspace.id,
+        name: "Main Team",
+        description: "Default team for releases",
+      });
+
+      // Add user to team
+      await storage.createTeamMember({
+        teamId: team.id,
+        workspaceMemberId: workspaceMember.id,
+        role: "admin",
+      });
+
+      // Create default environments (Staging, UAT, Production)
+      const defaultEnvs = [
+        { name: "Staging", sortOrder: "1" },
+        { name: "UAT", sortOrder: "2" },
+        { name: "Production", sortOrder: "3" },
+      ];
+      
+      for (const env of defaultEnvs) {
+        await storage.createEnvironment({
+          teamId: team.id,
+          name: env.name,
+          sortOrder: env.sortOrder,
+          isDefault: true,
+        });
+      }
+
       req.login(user, (err) => {
         if (err) return next(err);
         res.status(201).json(user);

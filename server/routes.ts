@@ -28,18 +28,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Releases
   app.get("/api/releases", async (req, res, next) => {
     try {
-      const team = req.query.team as string | undefined;
-      const status = req.query.status as string | undefined;
-      const releases = await storage.getReleases({ team, status });
+      if (!req.isAuthenticated()) return res.sendStatus(401);
       
-      // Attach stages and blockers to each release for filtering
+      // Get user's workspaces and teams
+      const workspaces = await storage.getWorkspacesByUser(req.user!.id);
+      if (workspaces.length === 0) {
+        return res.json([]);
+      }
+      
+      const teams = await storage.getTeamsByWorkspace(workspaces[0].id);
+      if (teams.length === 0) {
+        return res.json([]);
+      }
+      
+      // Validate teamId if provided
+      const requestedTeamId = req.query.teamId as string | undefined;
+      const teamId = requestedTeamId || teams[0].id;
+      
+      // Security: Verify teamId belongs to user's workspace
+      const hasAccess = teams.some(t => t.id === teamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied to this team" });
+      }
+      
+      const releases = await storage.getReleases({ teamId });
+      
+      // Attach stages, environments, and blockers to each release for filtering
       const releasesWithStages = await Promise.all(
         releases.map(async (release) => {
           const stages = await storage.getStagesByRelease(release.id);
           const stagesWithBlockers = await Promise.all(
             stages.map(async (stage) => {
+              const environment = await storage.getEnvironment(stage.environmentId);
               const blockers = await storage.getBlockersByStage(stage.id, true);
-              return { ...stage, blockers };
+              return { ...stage, environment, blockers };
             })
           );
           return { ...release, stages: stagesWithBlockers };
@@ -79,23 +101,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/releases", async (req, res, next) => {
     try {
-      const data = insertReleaseSchema.parse(req.body);
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      // Get user's workspaces and teams
+      const workspaces = await storage.getWorkspacesByUser(req.user!.id);
+      if (workspaces.length === 0) {
+        return res.status(400).json({ message: "No workspace found" });
+      }
+      
+      const teams = await storage.getTeamsByWorkspace(workspaces[0].id);
+      if (teams.length === 0) {
+        return res.status(400).json({ message: "No team found" });
+      }
+      
+      // Determine teamId and validate authorization
+      const requestedTeamId = req.body.teamId || teams[0].id;
+      
+      // Security: Verify teamId belongs to user's workspace
+      const hasAccess = teams.some(t => t.id === requestedTeamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied to this team" });
+      }
+      
+      const data = insertReleaseSchema.parse({
+        ...req.body,
+        teamId: requestedTeamId,
+        createdBy: req.user!.id,
+      });
+      
       const release = await storage.createRelease(data);
       
-      // Create default stages for the release
-      const defaultEnvs = ["staging", "uat", "prod"] as const;
-      for (const env of defaultEnvs) {
+      // Get default environments for this team and create stages
+      const environments = await storage.getEnvironmentsByTeam(data.teamId);
+      for (const environment of environments) {
         await storage.createStage({
           releaseId: release.id,
-          env,
+          environmentId: environment.id,
           status: "not_started",
         });
       }
       
       // Log activity
       await storage.createActivityLog({
+        workspaceId: workspaces[0].id,
         releaseId: release.id,
-        actor: data.createdBy || "system",
+        actor: req.user!.username,
         action: "release.created",
         meta: { releaseName: release.name },
       });
@@ -106,7 +156,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Validation error", errors: error.errors });
       }
-      // Log database errors
       if (error.code) {
         console.error("Database error code:", error.code);
       }
@@ -428,8 +477,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dashboard
   app.get("/api/dashboard", async (req, res, next) => {
     try {
-      const team = req.query.team as string | undefined;
-      const releases = await storage.getReleases({ team });
+      const teamId = req.query.teamId as string | undefined;
+      const releases = await storage.getReleases({ teamId });
       
       // Calculate status and progress for each release
       const releasesWithStatus = await Promise.all(
