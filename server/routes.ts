@@ -6,6 +6,19 @@ import { insertReleaseSchema, insertStageSchema, insertTaskSchema, insertBlocker
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Helper: Get user's teams and validate access
+  async function getUserTeams(userId: string) {
+    const workspaces = await storage.getWorkspacesByUser(userId);
+    if (workspaces.length === 0) return [];
+    const teams = await storage.getTeamsByWorkspace(workspaces[0].id);
+    return teams;
+  }
+  
+  async function validateTeamAccess(userId: string, teamId: string) {
+    const teams = await getUserTeams(userId);
+    return teams.some(t => t.id === teamId);
+  }
+
   // Setup authentication routes
   setupAuth(app);
 
@@ -76,9 +89,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/releases/:id", async (req, res, next) => {
     try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
       const release = await storage.getRelease(req.params.id);
       if (!release) {
         return res.status(404).json({ message: "Release not found" });
+      }
+      
+      // Verify user has access to this release's team
+      const hasAccess = await validateTeamAccess(req.user!.id, release.teamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied" });
       }
       
       // Get stages for this release
@@ -168,11 +189,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/releases/:id", async (req, res, next) => {
     try {
-      const data = insertReleaseSchema.partial().parse(req.body);
-      const release = await storage.updateRelease(req.params.id, data);
-      if (!release) {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const existing = await storage.getRelease(req.params.id);
+      if (!existing) {
         return res.status(404).json({ message: "Release not found" });
       }
+      
+      const hasAccess = await validateTeamAccess(req.user!.id, existing.teamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const data = insertReleaseSchema.partial().parse(req.body);
+      const release = await storage.updateRelease(req.params.id, data);
       res.json(release);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -184,10 +214,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/releases/:id", async (req, res, next) => {
     try {
-      const deleted = await storage.deleteRelease(req.params.id);
-      if (!deleted) {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const existing = await storage.getRelease(req.params.id);
+      if (!existing) {
         return res.status(404).json({ message: "Release not found" });
       }
+      
+      const hasAccess = await validateTeamAccess(req.user!.id, existing.teamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      await storage.deleteRelease(req.params.id);
       res.status(204).send();
     } catch (error) {
       next(error);
@@ -197,9 +236,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Stages
   app.get("/api/stages/:id", async (req, res, next) => {
     try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
       const stage = await storage.getStage(req.params.id);
       if (!stage) {
         return res.status(404).json({ message: "Stage not found" });
+      }
+      
+      const release = await storage.getRelease(stage.releaseId);
+      if (!release || !(await validateTeamAccess(req.user!.id, release.teamId))) {
+        return res.status(403).json({ message: "Access denied" });
       }
       
       const tasks = await storage.getTasksByStage(stage.id);
@@ -213,17 +259,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/stages/:id", async (req, res, next) => {
     try {
-      const data = insertStageSchema.partial().parse(req.body);
-      const stage = await storage.updateStage(req.params.id, data);
-      if (!stage) {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const existing = await storage.getStage(req.params.id);
+      if (!existing) {
         return res.status(404).json({ message: "Stage not found" });
       }
       
+      const release = await storage.getRelease(existing.releaseId);
+      if (!release || !(await validateTeamAccess(req.user!.id, release.teamId))) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const data = insertStageSchema.partial().parse(req.body);
+      const stage = await storage.updateStage(req.params.id, data);
+      
       // Log activity
       await storage.createActivityLog({
-        releaseId: stage.releaseId,
-        stageId: stage.id,
-        actor: "system",
+        workspaceId: (await storage.getWorkspacesByUser(req.user!.id))[0]?.id,
+        releaseId: stage!.releaseId,
+        stageId: stage!.id,
+        actor: req.user!.username,
         action: "stage.updated",
         meta: { changes: data },
       });
@@ -239,9 +295,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/stages/:id/approve", async (req, res, next) => {
     try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
       const stage = await storage.getStage(req.params.id);
       if (!stage) {
         return res.status(404).json({ message: "Stage not found" });
+      }
+      
+      const release = await storage.getRelease(stage.releaseId);
+      if (!release || !(await validateTeamAccess(req.user!.id, release.teamId))) {
+        return res.status(403).json({ message: "Access denied" });
       }
       
       const { approver, note } = req.body;
@@ -266,9 +329,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Log activity
       await storage.createActivityLog({
+        workspaceId: (await storage.getWorkspacesByUser(req.user!.id))[0]?.id,
         releaseId: stage.releaseId,
         stageId: stage.id,
-        actor: approver || "system",
+        actor: approver || req.user!.username,
         action: "stage.approved",
         meta: { note },
       });
@@ -282,9 +346,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Tasks
   app.post("/api/stages/:stageId/tasks", async (req, res, next) => {
     try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
       const stage = await storage.getStage(req.params.stageId);
       if (!stage) {
         return res.status(404).json({ message: "Stage not found" });
+      }
+      
+      const release = await storage.getRelease(stage.releaseId);
+      if (!release || !(await validateTeamAccess(req.user!.id, release.teamId))) {
+        return res.status(403).json({ message: "Access denied" });
       }
       
       const data = insertTaskSchema.parse({ ...req.body, stageId: req.params.stageId });
@@ -292,9 +363,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Log activity
       await storage.createActivityLog({
+        workspaceId: (await storage.getWorkspacesByUser(req.user!.id))[0]?.id,
         releaseId: stage.releaseId,
         stageId: stage.id,
-        actor: "system",
+        actor: req.user!.username,
         action: "task.created",
         meta: { taskId: task.id, taskTitle: task.title },
       });
@@ -310,25 +382,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/tasks/:id", async (req, res, next) => {
     try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
       const task = await storage.getTask(req.params.id);
       if (!task) {
         return res.status(404).json({ message: "Task not found" });
       }
       
+      const stage = await storage.getStage(task.stageId);
+      if (!stage) return res.sendStatus(404);
+      
+      const release = await storage.getRelease(stage.releaseId);
+      if (!release || !(await validateTeamAccess(req.user!.id, release.teamId))) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
       const data = insertTaskSchema.partial().parse(req.body);
       const updatedTask = await storage.updateTask(req.params.id, data);
       
-      // Get stage for logging
-      const stage = await storage.getStage(task.stageId);
-      if (stage) {
-        await storage.createActivityLog({
-          releaseId: stage.releaseId,
-          stageId: stage.id,
-          actor: "system",
-          action: "task.updated",
-          meta: { taskId: task.id, changes: data },
-        });
-      }
+      await storage.createActivityLog({
+        workspaceId: (await storage.getWorkspacesByUser(req.user!.id))[0]?.id,
+        releaseId: stage.releaseId,
+        stageId: stage.id,
+        actor: req.user!.username,
+        action: "task.updated",
+        meta: { taskId: task.id, changes: data },
+      });
       
       res.json(updatedTask);
     } catch (error) {
@@ -341,10 +420,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/tasks/:id", async (req, res, next) => {
     try {
-      const deleted = await storage.deleteTask(req.params.id);
-      if (!deleted) {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const task = await storage.getTask(req.params.id);
+      if (!task) {
         return res.status(404).json({ message: "Task not found" });
       }
+      
+      const stage = await storage.getStage(task.stageId);
+      if (!stage) return res.sendStatus(404);
+      
+      const release = await storage.getRelease(stage.releaseId);
+      if (!release || !(await validateTeamAccess(req.user!.id, release.teamId))) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      await storage.deleteTask(req.params.id);
       res.status(204).send();
     } catch (error) {
       next(error);
@@ -354,9 +445,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Blockers
   app.post("/api/stages/:stageId/blockers", async (req, res, next) => {
     try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
       const stage = await storage.getStage(req.params.stageId);
       if (!stage) {
         return res.status(404).json({ message: "Stage not found" });
+      }
+      
+      const release = await storage.getRelease(stage.releaseId);
+      if (!release || !(await validateTeamAccess(req.user!.id, release.teamId))) {
+        return res.status(403).json({ message: "Access denied" });
       }
       
       const data = insertBlockerSchema.parse({ ...req.body, stageId: req.params.stageId });
@@ -369,9 +467,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Log activity
       await storage.createActivityLog({
+        workspaceId: (await storage.getWorkspacesByUser(req.user!.id))[0]?.id,
         releaseId: stage.releaseId,
         stageId: stage.id,
-        actor: "system",
+        actor: req.user!.username,
         action: "blocker.created",
         meta: { blockerId: blocker.id, severity: blocker.severity },
       });
@@ -387,9 +486,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/blockers/:id", async (req, res, next) => {
     try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
       const blocker = await storage.getBlocker(req.params.id);
       if (!blocker) {
         return res.status(404).json({ message: "Blocker not found" });
+      }
+      
+      const stage = await storage.getStage(blocker.stageId);
+      if (!stage) return res.sendStatus(404);
+      
+      const release = await storage.getRelease(stage.releaseId);
+      if (!release || !(await validateTeamAccess(req.user!.id, release.teamId))) {
+        return res.status(403).json({ message: "Access denied" });
       }
       
       const data = insertBlockerSchema.partial().parse(req.body);
@@ -397,26 +506,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // If blocker is resolved, check if stage should be unblocked
       if (data.active === false) {
-        const stage = await storage.getStage(blocker.stageId);
-        if (stage) {
-          const activeBlockers = await storage.getBlockersByStage(stage.id, true);
-          if (activeBlockers.length === 0 && stage.status === "blocked") {
-            await storage.updateStage(stage.id, { status: "in_progress" });
-          }
+        const activeBlockers = await storage.getBlockersByStage(stage.id, true);
+        if (activeBlockers.length === 0 && stage.status === "blocked") {
+          await storage.updateStage(stage.id, { status: "in_progress" });
         }
       }
       
-      // Get stage for logging
-      const stage = await storage.getStage(blocker.stageId);
-      if (stage) {
-        await storage.createActivityLog({
-          releaseId: stage.releaseId,
-          stageId: stage.id,
-          actor: "system",
-          action: "blocker.updated",
-          meta: { blockerId: blocker.id, changes: data },
-        });
-      }
+      await storage.createActivityLog({
+        workspaceId: (await storage.getWorkspacesByUser(req.user!.id))[0]?.id,
+        releaseId: stage.releaseId,
+        stageId: stage.id,
+        actor: req.user!.username,
+        action: "blocker.updated",
+        meta: { blockerId: blocker.id, changes: data },
+      });
       
       res.json(updatedBlocker);
     } catch (error) {
@@ -429,10 +532,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/blockers/:id", async (req, res, next) => {
     try {
-      const deleted = await storage.deleteBlocker(req.params.id);
-      if (!deleted) {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const blocker = await storage.getBlocker(req.params.id);
+      if (!blocker) {
         return res.status(404).json({ message: "Blocker not found" });
       }
+      
+      const stage = await storage.getStage(blocker.stageId);
+      if (!stage) return res.sendStatus(404);
+      
+      const release = await storage.getRelease(stage.releaseId);
+      if (!release || !(await validateTeamAccess(req.user!.id, release.teamId))) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      await storage.deleteBlocker(req.params.id);
       res.status(204).send();
     } catch (error) {
       next(error);
@@ -442,6 +557,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Diagrams
   app.get("/api/releases/:releaseId/diagram", async (req, res, next) => {
     try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const release = await storage.getRelease(req.params.releaseId);
+      if (!release) {
+        return res.status(404).json({ message: "Release not found" });
+      }
+      
+      const hasAccess = await validateTeamAccess(req.user!.id, release.teamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
       const diagram = await storage.getDiagramByRelease(req.params.releaseId);
       if (!diagram) {
         return res.status(404).json({ message: "Diagram not found" });
@@ -454,6 +581,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/releases/:releaseId/diagram", async (req, res, next) => {
     try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const release = await storage.getRelease(req.params.releaseId);
+      if (!release) {
+        return res.status(404).json({ message: "Release not found" });
+      }
+      
+      const hasAccess = await validateTeamAccess(req.user!.id, release.teamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
       const { layout } = req.body;
       const diagram = await storage.updateDiagramLayout(req.params.releaseId, layout);
       res.json(diagram);
@@ -465,8 +604,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Activity Log
   app.get("/api/activity", async (req, res, next) => {
     try {
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
       const releaseId = req.query.releaseId as string | undefined;
       const stageId = req.query.stageId as string | undefined;
+      
+      // Always validate access to the release
+      let release;
+      if (releaseId) {
+        release = await storage.getRelease(releaseId);
+      } else if (stageId) {
+        const stage = await storage.getStage(stageId);
+        if (stage) {
+          release = await storage.getRelease(stage.releaseId);
+        }
+      }
+      
+      if (!release) {
+        return res.status(404).json({ message: "Release not found" });
+      }
+      
+      const hasAccess = await validateTeamAccess(req.user!.id, release.teamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
       const logs = await storage.getActivityLog({ releaseId, stageId });
       res.json(logs);
     } catch (error) {
@@ -477,7 +639,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dashboard
   app.get("/api/dashboard", async (req, res, next) => {
     try {
-      const teamId = req.query.teamId as string | undefined;
+      if (!req.isAuthenticated()) return res.sendStatus(401);
+      
+      const teams = await getUserTeams(req.user!.id);
+      if (teams.length === 0) {
+        return res.json([]);
+      }
+      
+      const requestedTeamId = req.query.teamId as string | undefined;
+      const teamId = requestedTeamId || teams[0].id;
+      
+      const hasAccess = teams.some(t => t.id === teamId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
       const releases = await storage.getReleases({ teamId });
       
       // Calculate status and progress for each release
