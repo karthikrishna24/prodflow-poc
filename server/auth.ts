@@ -119,21 +119,7 @@ export function setupAuth(app: Express) {
         role: "admin",
       });
 
-      // Create default environments (Staging, UAT, Production)
-      const defaultEnvs = [
-        { name: "Staging", sortOrder: "1" },
-        { name: "UAT", sortOrder: "2" },
-        { name: "Production", sortOrder: "3" },
-      ];
-      
-      for (const env of defaultEnvs) {
-        await storage.createEnvironment({
-          teamId: team.id,
-          name: env.name,
-          sortOrder: env.sortOrder,
-          isDefault: true,
-        });
-      }
+      // No default environments - users create their own
 
       req.login(user, (err) => {
         if (err) return next(err);

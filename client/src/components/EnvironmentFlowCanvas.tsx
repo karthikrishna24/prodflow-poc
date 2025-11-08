@@ -33,6 +33,7 @@ import {
 } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { Textarea } from "./ui/textarea";
 
 const nodeTypes = {
   environment: ({ data }: any) => (
@@ -59,6 +60,7 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
   const { toast } = useToast();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [newEnvName, setNewEnvName] = useState("");
+  const [newEnvDescription, setNewEnvDescription] = useState("");
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Fetch saved diagram layout
@@ -275,7 +277,7 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
 
   // Add environment mutation
   const addEnvironment = useMutation({
-    mutationFn: async (name: string) => {
+    mutationFn: async ({ name, description }: { name: string; description?: string }) => {
       if (!releaseId) throw new Error("No release selected");
       const teamId = release?.teamId || release?.team;
       if (!teamId) throw new Error("No team associated with release");
@@ -283,6 +285,7 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
       // First create the environment
       const envResponse = await apiRequest('POST', `/api/teams/${teamId}/environments`, { 
         name,
+        description,
         sortOrder: String(environments.length),
       });
       const env = await envResponse.json();
@@ -300,6 +303,7 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
       queryClient.invalidateQueries({ queryKey: ['/api/releases', releaseId] });
       setIsAddDialogOpen(false);
       setNewEnvName("");
+      setNewEnvDescription("");
       toast({
         title: "Environment added",
         description: "New environment has been added to the canvas.",
@@ -316,7 +320,10 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
 
   const handleAddEnvironment = () => {
     if (newEnvName.trim()) {
-      addEnvironment.mutate(newEnvName.trim());
+      addEnvironment.mutate({ 
+        name: newEnvName.trim(), 
+        description: newEnvDescription.trim() || undefined 
+      });
     }
   };
 
@@ -400,11 +407,22 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
                 value={newEnvName}
                 onChange={(e) => setNewEnvName(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newEnvName.trim()) {
+                  if (e.key === 'Enter' && newEnvName.trim() && !e.shiftKey) {
                     handleAddEnvironment();
                   }
                 }}
                 data-testid="input-environment-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="env-description">Description (Optional)</Label>
+              <Textarea
+                id="env-description"
+                placeholder="Brief description of this environment's purpose"
+                value={newEnvDescription}
+                onChange={(e) => setNewEnvDescription(e.target.value)}
+                rows={3}
+                data-testid="input-environment-description"
               />
             </div>
           </div>
@@ -414,6 +432,7 @@ export default function EnvironmentFlowCanvas({ releaseId, onEnvironmentClick }:
               onClick={() => {
                 setIsAddDialogOpen(false);
                 setNewEnvName("");
+                setNewEnvDescription("");
               }}
               data-testid="button-cancel-add-environment"
             >

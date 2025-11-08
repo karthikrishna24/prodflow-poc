@@ -148,6 +148,7 @@ export const environments = pgTable("environments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   teamId: varchar("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
+  description: text("description"),
   sortOrder: text("sort_order").notNull(),
   isDefault: boolean("is_default").default(false).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -158,6 +159,7 @@ export const environments = pgTable("environments", {
 export const insertEnvironmentSchema = createInsertSchema(environments).pick({
   teamId: true,
   name: true,
+  description: true,
   sortOrder: true,
   isDefault: true,
 });
