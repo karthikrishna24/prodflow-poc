@@ -257,6 +257,28 @@ export const insertTaskSchema = createInsertSchema(tasks).pick({
 export type InsertTask = z.infer<typeof insertTaskSchema>;
 export type Task = typeof tasks.$inferSelect;
 
+// Task Dependencies (connections between tasks)
+export const taskDependencies = pgTable("task_dependencies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  stageId: varchar("stage_id").notNull().references(() => stages.id, { onDelete: "cascade" }),
+  sourceTaskId: varchar("source_task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  targetTaskId: varchar("target_task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  type: text("type"), // optional: "blocks", "requires", "depends_on", etc.
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  uniqueDependency: unique().on(table.sourceTaskId, table.targetTaskId),
+}));
+
+export const insertTaskDependencySchema = createInsertSchema(taskDependencies).pick({
+  stageId: true,
+  sourceTaskId: true,
+  targetTaskId: true,
+  type: true,
+});
+
+export type InsertTaskDependency = z.infer<typeof insertTaskDependencySchema>;
+export type TaskDependency = typeof taskDependencies.$inferSelect;
+
 // Blockers
 export const blockers = pgTable("blockers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -300,6 +322,22 @@ export const insertDiagramSchema = createInsertSchema(diagrams).pick({
 
 export type InsertDiagram = z.infer<typeof insertDiagramSchema>;
 export type Diagram = typeof diagrams.$inferSelect;
+
+// Stage Diagrams (task canvas layouts for each stage)
+export const stageDiagrams = pgTable("stage_diagrams", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  stageId: varchar("stage_id").notNull().unique().references(() => stages.id, { onDelete: "cascade" }),
+  layout: jsonb("layout"), // Store {nodes: [], edges: []}
+  updatedAt: timestamp("updated_at", { withTimezone: true}).defaultNow().notNull(),
+});
+
+export const insertStageDiagramSchema = createInsertSchema(stageDiagrams).pick({
+  stageId: true,
+  layout: true,
+});
+
+export type InsertStageDiagram = z.infer<typeof insertStageDiagramSchema>;
+export type StageDiagram = typeof stageDiagrams.$inferSelect;
 
 // Diagram Nodes
 export const diagramNodes = pgTable("diagram_nodes", {
