@@ -16,6 +16,18 @@ DockVoyage is a production-ready multi-tenant release management platform with n
 
 ## Recent Changes (November 8, 2025)
 
+### Email Invitation System ✅
+- **Workspace type selection**: Signup flow now asks users to select individual vs organization workspace
+- **Resend integration**: Email service configured for transactional emails with nautical branding
+- **Invitation APIs**: Secure backend endpoints for creating, listing, and accepting invitations
+  - Admin-only access: Only workspace admins can send/view invitations
+  - Input validation: All invitation data validated with Zod schemas
+  - Token sanitization: Sensitive tokens removed from API responses
+- **Team Management UI**: New page for workspace admins to invite team members via email
+- **Nautical-themed emails**: HTML email template with DockVoyage anchor branding
+- **Public invitation flow**: Accept page allows invited users to join workspaces
+- **URL generation**: Invitation links use request host for proper email delivery
+
 ### Session Handling Fix ✅
 - **Fixed session deserialization errors** that prevented app from loading
 - Updated Passport deserializeUser to gracefully handle missing users (returns null instead of throwing)
