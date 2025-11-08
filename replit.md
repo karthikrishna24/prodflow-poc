@@ -22,9 +22,14 @@ DockVoyage is a production-ready multi-tenant release management platform with n
 - **Environment descriptions**: Description field added to database schema and persisted correctly
 - **Delete environments**: Trash icon button on environment nodes with confirmation dialog
 - **Cascade deletion**: Deleting an environment removes it from all releases via database foreign keys
+- **User-friendly error messages**: All errors display as readable toasts instead of raw database/code errors
 - **API endpoints for environment CRUD**:
-  - POST `/api/teams/:teamId/environments` - Create environment with name and description
+  - POST `/api/teams/:teamId/environments` - Create environment with name and description (handles duplicates)
   - DELETE `/api/environments/:id` - Delete environment (admin/owner only, cascade removes from all releases)
+- **Error handling**:
+  - Duplicate environment names: "An environment with the name '{name}' already exists in this team."
+  - FK constraint violations: "Cannot delete environment because it's still being used. Please remove it from all releases first."
+  - Generic failures: "Failed to delete environment. Please try again."
 
 ### Interactive Canvas for Release Management ✅
 - **Draggable environment nodes**: Users can drag and reposition environment boxes on the canvas
